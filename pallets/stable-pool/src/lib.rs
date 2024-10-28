@@ -46,13 +46,10 @@ use sp_core::U256;
 use sp_runtime::{Permill, SaturatedConversion};
 use sp_std::prelude::*;
 
-#[allow(type_alias_bounds)]
 pub type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
 
-#[allow(type_alias_bounds)]
 pub type AssetIdOf<T> = <T as Config>::CurrencyId;
 
-#[allow(type_alias_bounds)]
 pub type AtLeast64BitUnsignedOf<T> = <T as bifrost_stable_asset::Config>::AtLeast64BitUnsigned;
 #[frame_support::pallet]
 pub mod pallet {

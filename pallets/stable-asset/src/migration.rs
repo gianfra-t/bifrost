@@ -77,7 +77,6 @@ impl<T: super::Config> OnRuntimeUpgrade for StableAssetOnRuntimeUpgrade<T> {
 
 	#[cfg(feature = "try-runtime")]
 	fn post_upgrade(_: sp_std::prelude::Vec<u8>) -> Result<(), sp_runtime::DispatchError> {
-		#[allow(unused_imports)]
 		use frame_support::PalletId;
 		log::info!("Bifrost `post_upgrade`...");
 		let old_pallet_id: PalletId = PalletId(*b"nuts/sta");

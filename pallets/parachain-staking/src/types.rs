@@ -1123,7 +1123,6 @@ impl<A: Clone, B: Copy> From<CollatorCandidate<A, B>> for CollatorSnapshot<A, B>
 	}
 }
 
-#[allow(deprecated)]
 #[derive(Clone, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
 pub enum DelegatorStatus {
 	/// Active with no scheduled exit
