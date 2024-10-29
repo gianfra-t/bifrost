@@ -738,7 +738,6 @@ type ApproveOrigin = EitherOfDiverse<
 >;
 
 impl pallet_treasury::Config for Runtime {
-	type ApproveOrigin = ApproveOrigin;
 	type SpendOrigin = EitherOf<EnsureRootWithSuccess<AccountId, MaxBalance>, Spender>;
 	type Burn = Burn;
 	type BurnDestination = ();
@@ -753,11 +752,7 @@ impl pallet_treasury::Config for Runtime {
 	type PayoutPeriod = PayoutSpendPeriod;
 	#[cfg(feature = "runtime-benchmarks")]
 	type BenchmarkHelper = ();
-	type OnSlash = Treasury;
 	type PalletId = TreasuryPalletId;
-	type ProposalBond = ProposalBond;
-	type ProposalBondMinimum = ProposalBondMinimum;
-	type ProposalBondMaximum = ProposalBondMaximum;
 	type RejectOrigin = MoreThanHalfCouncil;
 	type SpendFunds = ();
 	type SpendPeriod = SpendPeriod;
