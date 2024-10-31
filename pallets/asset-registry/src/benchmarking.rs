@@ -21,13 +21,18 @@
 use super::*;
 use crate::Pallet as AssetRegistry;
 use bifrost_primitives::CurrencyId;
-use frame_benchmarking::{benchmarks, v1::BenchmarkError};
+use frame_benchmarking::v2::*;
 use frame_support::{assert_ok, traits::UnfilteredDispatchable};
 use sp_runtime::traits::UniqueSaturatedFrom;
 
-benchmarks! {
-	register_token_metadata {
-		let origin = T::RegisterOrigin::try_successful_origin().map_err(|_| BenchmarkError::Weightless)?;
+#[benchmarks]
+mod benchmarks {
+	use super::*;
+
+	#[benchmark]
+	fn register_token_metadata() -> Result<(), BenchmarkError> {
+		let origin =
+			T::RegisterOrigin::try_successful_origin().map_err(|_| BenchmarkError::Weightless)?;
 		let metadata = AssetMetadata {
 			name: b"Bifrost Native Coin".to_vec(),
 			symbol: b"BNC".to_vec(),
@@ -35,16 +40,21 @@ benchmarks! {
 			minimal_balance: BalanceOf::<T>::unique_saturated_from(0u128),
 		};
 
-		let call = Call::<T>::register_token_metadata {
-			metadata: Box::new(metadata.clone())
-		};
-	}: {call.dispatch_bypass_filter(origin)?}
-	verify {
-		assert_eq!(CurrencyMetadatas::<T>::get(Token2(0)), Some(metadata.clone()))
+		let call = Call::<T>::register_token_metadata { metadata: Box::new(metadata.clone()) };
+
+		#[block]
+		{
+			call.dispatch_bypass_filter(origin)?;
+		}
+
+		assert_eq!(CurrencyMetadatas::<T>::get(Token2(0)), Some(metadata.clone()));
+		Ok(())
 	}
 
-	register_vtoken_metadata {
-		let origin = T::RegisterOrigin::try_successful_origin().map_err(|_| BenchmarkError::Weightless)?;
+	#[benchmark]
+	fn register_vtoken_metadata() -> Result<(), BenchmarkError> {
+		let origin =
+			T::RegisterOrigin::try_successful_origin().map_err(|_| BenchmarkError::Weightless)?;
 		let metadata = AssetMetadata {
 			name: b"Bifrost Native Coin".to_vec(),
 			symbol: b"BNC".to_vec(),
@@ -62,27 +72,28 @@ benchmarks! {
 			Box::new(metadata.clone())
 		));
 
-		let call = Call::<T>::register_vtoken_metadata {
-			token_id: 0
-		};
-	}: {call.dispatch_bypass_filter(origin)?}
-	verify {
-		assert_eq!(
-			CurrencyMetadatas::<T>::get(CurrencyId::VToken2(0)),
-			Some(v_metadata.clone())
-		)
+		let call = Call::<T>::register_vtoken_metadata { token_id: 0 };
+
+		#[block]
+		{
+			call.dispatch_bypass_filter(origin)?;
+		}
+
+		assert_eq!(CurrencyMetadatas::<T>::get(CurrencyId::VToken2(0)), Some(v_metadata.clone()));
+		Ok(())
 	}
 
-	register_location {
-		let origin = T::RegisterOrigin::try_successful_origin().map_err(|_| BenchmarkError::Weightless)?;
+	#[benchmark]
+	fn register_location() -> Result<(), BenchmarkError> {
+		let origin =
+			T::RegisterOrigin::try_successful_origin().map_err(|_| BenchmarkError::Weightless)?;
 		let metadata = AssetMetadata {
 			name: b"Bifrost Native Coin".to_vec(),
 			symbol: b"BNC".to_vec(),
 			decimals: 12,
 			minimal_balance: BalanceOf::<T>::unique_saturated_from(0u128),
 		};
-	let versioned_location = VersionedLocation::V4(Location::new(1, [Parachain(2001)]));
-
+		let versioned_location = VersionedLocation::V4(Location::new(1, [Parachain(2001)]));
 		let location: xcm::v4::Location = versioned_location.clone().try_into().unwrap();
 
 		assert_ok!(AssetRegistry::<T>::register_token_metadata(
@@ -92,24 +103,28 @@ benchmarks! {
 
 		let call = Call::<T>::register_location {
 			currency_id: Token2(0),
-			location:Box::new(versioned_location.clone()),
-			weight:Weight::from_parts(2000_000_000, u64::MAX),
+			location: Box::new(versioned_location.clone()),
+			weight: Weight::from_parts(2000_000_000, u64::MAX),
 		};
-	}: {call.dispatch_bypass_filter(origin)?}
-	verify {
+
+		#[block]
+		{
+			call.dispatch_bypass_filter(origin)?;
+		}
+
+		assert_eq!(LocationToCurrencyIds::<T>::get(location.clone()), Some(Token2(0)));
+		assert_eq!(CurrencyIdToLocations::<T>::get(Token2(0)), Some(location));
 		assert_eq!(
-			LocationToCurrencyIds::<T>::get(location.clone()),
-			Some(Token2(0))
+			CurrencyIdToWeights::<T>::get(Token2(0)),
+			Some(Weight::from_parts(2000_000_000, u64::MAX))
 		);
-		assert_eq!(
-			CurrencyIdToLocations::<T>::get(Token2(0)),
-			Some(location)
-		);
-		assert_eq!(CurrencyIdToWeights::<T>::get(Token2(0)), Some(Weight::from_parts(2000_000_000, u64::MAX)));
+		Ok(())
 	}
 
-	force_set_location {
-		let origin = T::RegisterOrigin::try_successful_origin().map_err(|_| BenchmarkError::Weightless)?;
+	#[benchmark]
+	fn force_set_location() -> Result<(), BenchmarkError> {
+		let origin =
+			T::RegisterOrigin::try_successful_origin().map_err(|_| BenchmarkError::Weightless)?;
 		let metadata = AssetMetadata {
 			name: b"Bifrost Native Coin".to_vec(),
 			symbol: b"BNC".to_vec(),
@@ -118,8 +133,6 @@ benchmarks! {
 		};
 		let versioned_location = VersionedLocation::V4(Location::new(1, [Parachain(2001)]));
 
-		let location: xcm::v3::Location = versioned_location.clone().try_into().unwrap();
-
 		assert_ok!(AssetRegistry::<T>::register_token_metadata(
 			origin.clone(),
 			Box::new(metadata.clone())
@@ -127,13 +140,22 @@ benchmarks! {
 
 		let call = Call::<T>::force_set_location {
 			currency_id: Token2(0),
-			location:Box::new(versioned_location.clone()),
-			weight:Weight::from_parts(2000_000_000, u64::MAX),
+			location: Box::new(versioned_location.clone()),
+			weight: Weight::from_parts(2000_000_000, u64::MAX),
 		};
-	}: {call.dispatch_bypass_filter(origin)?}
 
-	update_currency_metadata {
-		let origin = T::RegisterOrigin::try_successful_origin().map_err(|_| BenchmarkError::Weightless)?;
+		#[block]
+		{
+			call.dispatch_bypass_filter(origin)?;
+		}
+
+		Ok(())
+	}
+
+	#[benchmark]
+	fn update_currency_metadata() -> Result<(), BenchmarkError> {
+		let origin =
+			T::RegisterOrigin::try_successful_origin().map_err(|_| BenchmarkError::Weightless)?;
 
 		assert_ok!(AssetRegistry::<T>::register_token_metadata(
 			origin.clone(),
@@ -149,12 +171,15 @@ benchmarks! {
 			currency_id: CurrencyId::Token2(0),
 			asset_name: Some(b"Token Name".to_vec()),
 			asset_symbol: Some(b"TN".to_vec()),
-			asset_decimals : Some(12),
-			asset_minimal_balance : Some(BalanceOf::<T>::unique_saturated_from(1000u128)),
+			asset_decimals: Some(12),
+			asset_minimal_balance: Some(BalanceOf::<T>::unique_saturated_from(1000u128)),
 		};
 
-	}: {call.dispatch_bypass_filter(origin)?}
-	verify {
+		#[block]
+		{
+			call.dispatch_bypass_filter(origin)?;
+		}
+
 		assert_eq!(
 			CurrencyMetadatas::<T>::get(CurrencyId::Token2(0)),
 			Some(AssetMetadata {
@@ -164,12 +189,16 @@ benchmarks! {
 				minimal_balance: BalanceOf::<T>::unique_saturated_from(1000u128),
 			})
 		);
+		Ok(())
 	}
 
-	impl_benchmark_test_suite!(
-	AssetRegistry,
-	crate::mock::ExtBuilder::default().build(),
-	crate::mock::Runtime
-);
-
+	// This line generates test cases for benchmarking, and could be run by:
+	//   `cargo test -p pallet-example-basic --all-features`, you will see one line per case:
+	//   `test benchmarking::bench_sort_vector ... ok`
+	//   `test benchmarking::bench_accumulate_dummy ... ok`
+	//   `test benchmarking::bench_set_dummy_benchmark ... ok` in the result.
+	//
+	// The line generates three steps per benchmark, with repeat=1 and the three steps are
+	//   [low, mid, high] of the range.
+	impl_benchmark_test_suite!(Pallet, crate::mock::new_test_ext_benchmark(), crate::mock::Runtime);
 }
