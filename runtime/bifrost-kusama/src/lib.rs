@@ -2034,6 +2034,7 @@ pub mod migrations {
 		>,
 		// permanent migration, do not remove
 		pallet_xcm::migration::MigrateToLatestXcmVersion<Runtime>,
+		bifrost_flexible_fee::migrations::v3::MigrateToV3<Runtime>,
 	);
 }
 
