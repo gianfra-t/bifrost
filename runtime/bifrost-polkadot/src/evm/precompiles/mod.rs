@@ -22,6 +22,7 @@ use crate::evm::precompiles::{
 	erc20_mapping::is_asset_address, multicurrency::MultiCurrencyPrecompile,
 };
 use ethabi::Token;
+use fp_evm::AccountProvider;
 use frame_support::dispatch::{GetDispatchInfo, PostDispatchInfo};
 use hex_literal::hex;
 use pallet_evm::{
@@ -102,7 +103,7 @@ impl<R> PrecompileSet for BifrostPrecompiles<R>
 where
 	R: pallet_evm::Config + bifrost_currencies::Config,
 	R::RuntimeCall: Dispatchable<PostInfo = PostDispatchInfo> + GetDispatchInfo + Decode,
-	<R::RuntimeCall as Dispatchable>::RuntimeOrigin: From<Option<R::AccountId>>,
+	<R::RuntimeCall as Dispatchable>::RuntimeOrigin: From<Option<pallet_evm::AccountIdOf<R>>>,
 	MultiCurrencyPrecompile<R>: Precompile,
 {
 	fn execute(&self, handle: &mut impl PrecompileHandle) -> Option<PrecompileResult> {
