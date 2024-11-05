@@ -167,11 +167,7 @@ pub mod pallet {
 		>;
 
 		// asset registry to get asset metadata
-		type AssetIdMaps: CurrencyIdMapping<
-			CurrencyId,
-			MultiLocation,
-			AssetMetadata<BalanceOf<Self>>,
-		>;
+		type AssetIdMaps: CurrencyIdMapping<CurrencyId, AssetMetadata<BalanceOf<Self>>>;
 
 		#[pallet::constant]
 		type TreasuryAccount: Get<Self::AccountId>;

@@ -248,13 +248,13 @@ parameter_types! {
 pub struct CurrencyIdConvert<T>(sp_std::marker::PhantomData<T>);
 impl<T: Get<ParaId>> Convert<CurrencyId, Option<Location>> for CurrencyIdConvert<T> {
 	fn convert(id: CurrencyId) -> Option<Location> {
-		AssetIdMaps::<Test>::get_location(id)
+		AssetIdMaps::<Test>::get_location(&id)
 	}
 }
 
 impl<T: Get<ParaId>> Convert<Location, Option<CurrencyId>> for CurrencyIdConvert<T> {
 	fn convert(location: Location) -> Option<CurrencyId> {
-		AssetIdMaps::<Test>::get_currency_id(location)
+		AssetIdMaps::<Test>::get_currency_id(&location)
 	}
 }
 

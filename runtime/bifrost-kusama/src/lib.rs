@@ -37,9 +37,9 @@ use bifrost_primitives::{
 	BifrostCrowdloanId, BifrostVsbondAccount, BuybackPalletId, CommissionPalletId,
 	FarmingBoostPalletId, FarmingGaugeRewardIssuerPalletId, FarmingKeeperPalletId,
 	FarmingRewardIssuerPalletId, FeeSharePalletId, FlexibleFeePalletId, IncentivePoolAccount,
-	LendMarketPalletId, MerkleDirtributorPalletId, OraclePalletId, ParachainStakingPalletId,
-	SlpEntrancePalletId, SlpExitPalletId, SystemMakerPalletId, SystemStakingPalletId,
-	TreasuryPalletId, VBNCConvertPalletId,
+	LendMarketPalletId, LocalBncLocation, MerkleDirtributorPalletId, OraclePalletId,
+	ParachainStakingPalletId, SlpEntrancePalletId, SlpExitPalletId, SystemMakerPalletId,
+	SystemStakingPalletId, TreasuryPalletId, VBNCConvertPalletId,
 };
 pub use frame_support::{
 	construct_runtime, match_types, parameter_types,
@@ -109,6 +109,7 @@ use frame_support::{
 		Currency, EitherOf, EitherOfDiverse, Get, Imbalance, InsideBoth, LinearStoragePrice,
 		LockIdentifier, OnUnbalanced,
 	},
+	weights::WeightToFee as _,
 };
 use frame_system::{EnsureRoot, EnsureRootWithSuccess, EnsureSigned};
 use hex_literal::hex;
@@ -133,16 +134,23 @@ use governance::{
 
 // xcm config
 pub mod xcm_config;
-use bifrost_primitives::MoonriverChainId;
+use bifrost_primitives::{MoonriverChainId, OraclePriceProvider};
 use bifrost_runtime_common::currency_converter::CurrencyIdConvert;
 use pallet_xcm::{EnsureResponse, QueryStatus};
 use sp_runtime::traits::{IdentityLookup, Verify};
-use xcm::{v3::MultiLocation, v4::prelude::*};
+use xcm::{
+	v3::MultiLocation, v4::prelude::*, IntoVersion, VersionedAssetId, VersionedAssets,
+	VersionedLocation, VersionedXcm,
+};
 pub use xcm_config::{
 	AccountId32Aliases, BifrostTreasuryAccount, ExistentialDeposits, MultiCurrency, Sibling,
 	SiblingParachainConvertsVia, XcmConfig, XcmRouter,
 };
 use xcm_executor::{traits::QueryHandler, XcmExecutor};
+use xcm_fee_payment_runtime_api::{
+	dry_run::{CallDryRunEffects, Error as XcmDryRunApiError, XcmDryRunEffects},
+	fees::Error as XcmPaymentApiError,
+};
 
 impl_opaque_keys! {
 	pub struct SessionKeys {
@@ -2194,6 +2202,49 @@ impl_runtime_apis! {
 
 		fn authorities() -> Vec<AuraId> {
 			pallet_aura::Authorities::<Runtime>::get().into_inner()
+		}
+	}
+
+	impl xcm_fee_payment_runtime_api::fees::XcmPaymentApi<Block> for Runtime {
+		fn query_acceptable_payment_assets(xcm_version: xcm::Version) -> Result<Vec<VersionedAssetId>, XcmPaymentApiError> {
+			let acceptable_assets = AssetRegistry::asset_ids();
+			PolkadotXcm::query_acceptable_payment_assets(xcm_version, acceptable_assets)
+		}
+
+		fn query_weight_to_asset_fee(weight: Weight, asset: VersionedAssetId) -> Result<u128, XcmPaymentApiError> {
+			let asset = asset
+				.into_version(4)
+				.map_err(|_| XcmPaymentApiError::VersionedConversionFailed)?;
+			let bnc_asset = VersionedAssetId::V4(LocalBncLocation::get().into());
+
+			if asset == bnc_asset {
+				// for native token
+				Ok(WeightToFee::weight_to_fee(&weight))
+			} else {
+				let native_fee = WeightToFee::weight_to_fee(&weight);
+				let asset_location = &asset.try_as::<AssetId>().map_err(|_| XcmPaymentApiError::VersionedConversionFailed)?.0;
+				let asset_currency = AssetIdMaps::<Runtime>::get_currency_id(&asset_location).ok_or(XcmPaymentApiError::AssetNotFound)?;
+				let asset_fee = Prices::get_oracle_amount_by_currency_and_amount_in(&bifrost_primitives::BNC, native_fee, &asset_currency).ok_or(XcmPaymentApiError::AssetNotFound)?.0;
+				Ok(asset_fee)
+			}
+		}
+
+		fn query_xcm_weight(message: VersionedXcm<()>) -> Result<Weight, XcmPaymentApiError> {
+			PolkadotXcm::query_xcm_weight(message)
+		}
+
+		fn query_delivery_fees(destination: VersionedLocation, message: VersionedXcm<()>) -> Result<VersionedAssets, XcmPaymentApiError> {
+			PolkadotXcm::query_delivery_fees(destination, message)
+		}
+	}
+
+	impl xcm_fee_payment_runtime_api::dry_run::DryRunApi<Block, RuntimeCall, RuntimeEvent, OriginCaller> for Runtime {
+		fn dry_run_call(origin: OriginCaller, call: RuntimeCall) -> Result<CallDryRunEffects<RuntimeEvent>, XcmDryRunApiError> {
+			PolkadotXcm::dry_run_call::<Runtime, XcmRouter, OriginCaller, RuntimeCall>(origin, call)
+		}
+
+		fn dry_run_xcm(origin_location: VersionedLocation, xcm: VersionedXcm<RuntimeCall>) -> Result<XcmDryRunEffects<RuntimeEvent>, XcmDryRunApiError> {
+			PolkadotXcm::dry_run_xcm::<Runtime, XcmRouter, RuntimeCall, XcmConfig>(origin_location, xcm)
 		}
 	}
 

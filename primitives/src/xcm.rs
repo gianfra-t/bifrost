@@ -25,7 +25,7 @@ use sp_runtime::traits::Convert;
 use sp_std::marker::PhantomData;
 use xcm::{
 	latest::Asset,
-	prelude::{AccountId32, Ethereum, Fungible, GlobalConsensus, Parachain},
+	prelude::{AccountId32, Ethereum, Fungible, GeneralKey, GlobalConsensus, Parachain},
 	v4::{AssetId, InteriorLocation, Location, NetworkId, Parent},
 };
 
@@ -58,6 +58,13 @@ parameter_types! {
 	pub SelfLocation: Location = Location::here();
 	pub AssetHubLocation: Location = Location::new(1, Parachain(AssetHubChainId::get()));
 	pub EthereumLocation: Location = Location::new(2, [GlobalConsensus(Ethereum { chain_id: EthereumChainId::get() })]);
+	pub LocalBncLocation: Location = Location::new(0, [GeneralKey {
+		length: 2,
+		data: [
+			0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			0, 0, 0
+		],
+	}]);
 
 	pub const KusamaNetwork: NetworkId = NetworkId::Kusama;
 	pub const PolkadotNetwork: NetworkId = NetworkId::Polkadot;

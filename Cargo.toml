@@ -253,6 +253,7 @@ substrate-fixed                            = { git = "https://github.com/encoint
 xcm                                        = { git = "https://github.com/paritytech/polkadot-sdk", branch = "release-polkadot-v1.13.0", package = "staging-xcm", default-features = false }
 xcm-builder                                = { git = "https://github.com/paritytech/polkadot-sdk", branch = "release-polkadot-v1.13.0", package = "staging-xcm-builder", default-features = false }
 xcm-executor                               = { git = "https://github.com/paritytech/polkadot-sdk", branch = "release-polkadot-v1.13.0", package = "staging-xcm-executor", default-features = false }
+xcm-fee-payment-runtime-api                = { git = "https://github.com/paritytech/polkadot-sdk", branch = "release-polkadot-v1.13.0", default-features = false }
 
 # polkadot-sdk (client)
 cumulus-client-cli                            = { git = "https://github.com/paritytech/polkadot-sdk", branch = "release-polkadot-v1.13.0" }
