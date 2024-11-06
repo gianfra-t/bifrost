@@ -56,6 +56,15 @@ pub trait WeightInfo {
 	fn set_config() -> Weight;
 	fn create_lock() -> Weight;
 	fn increase_amount() -> Weight;
+	fn increase_unlock_time() -> Weight;
+	fn withdraw() -> Weight;
+	fn get_rewards() -> Weight;
+	fn notify_rewards() -> Weight;
+	fn set_markup_coefficient() -> Weight;
+	fn deposit_markup() -> Weight;
+	fn withdraw_markup() -> Weight;
+	fn redeem_unlock() -> Weight;
+	fn refresh() -> Weight;
 }
 
 // For backwards compatibility and tests
@@ -74,8 +83,8 @@ impl WeightInfo for () {
 		// Proof Size summary in bytes:
 		//  Measured:  `134`
 		//  Estimated: `1619`
-		// Minimum execution time: 25_033_000 picoseconds.
-		Weight::from_parts(27_097_000, 1619)
+		// Minimum execution time: 6_438_000 picoseconds.
+		Weight::from_parts(6_596_000, 1619)
 			.saturating_add(RocksDbWeight::get().reads(5_u64))
 			.saturating_add(RocksDbWeight::get().writes(3_u64))
 	}
@@ -131,8 +140,8 @@ impl WeightInfo for () {
 		// Proof Size summary in bytes:
 		//  Measured:  `1389`
 		//  Estimated: `7329`
-		// Minimum execution time: 224_140_000 picoseconds.
-		Weight::from_parts(235_273_000, 7329)
+		// Minimum execution time: 70_211_000 picoseconds.
+		Weight::from_parts(72_792_000, 7329)
 			.saturating_add(RocksDbWeight::get().reads(23_u64))
 			.saturating_add(RocksDbWeight::get().writes(17_u64))
 	}
@@ -184,9 +193,392 @@ impl WeightInfo for () {
 		// Proof Size summary in bytes:
 		//  Measured:  `2248`
 		//  Estimated: `5713`
-		// Minimum execution time: 277_278_000 picoseconds.
-		Weight::from_parts(299_033_000, 5713)
+		// Minimum execution time: 90_593_000 picoseconds.
+		Weight::from_parts(93_153_000, 5713)
 			.saturating_add(RocksDbWeight::get().reads(22_u64))
 			.saturating_add(RocksDbWeight::get().writes(15_u64))
+	}
+	/// Storage: `BbBNC::UserPositions` (r:1 w:0)
+	/// Proof: `BbBNC::UserPositions` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::BbConfigs` (r:1 w:0)
+	/// Proof: `BbBNC::BbConfigs` (`max_values`: Some(1), `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::Locked` (r:1 w:1)
+	/// Proof: `BbBNC::Locked` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `System::Number` (r:1 w:0)
+	/// Proof: `System::Number` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `BbBNC::Supply` (r:1 w:1)
+	/// Proof: `BbBNC::Supply` (`max_values`: Some(1), `max_size`: None, mode: `Measured`)
+	/// Storage: `Tokens::Accounts` (r:1 w:0)
+	/// Proof: `Tokens::Accounts` (`max_values`: None, `max_size`: Some(118), added: 2593, mode: `MaxEncodedLen`)
+	/// Storage: `BbBNC::UserMarkupInfos` (r:1 w:0)
+	/// Proof: `BbBNC::UserMarkupInfos` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::UserFarmingPool` (r:1 w:0)
+	/// Proof: `BbBNC::UserFarmingPool` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::IncentiveConfigs` (r:1 w:1)
+	/// Proof: `BbBNC::IncentiveConfigs` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::Epoch` (r:1 w:1)
+	/// Proof: `BbBNC::Epoch` (`max_values`: Some(1), `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::PointHistory` (r:1 w:1)
+	/// Proof: `BbBNC::PointHistory` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::UserPointEpoch` (r:1 w:1)
+	/// Proof: `BbBNC::UserPointEpoch` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::UserPointHistory` (r:1 w:1)
+	/// Proof: `BbBNC::UserPointHistory` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::Rewards` (r:1 w:1)
+	/// Proof: `BbBNC::Rewards` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::UserRewardPerTokenPaid` (r:1 w:1)
+	/// Proof: `BbBNC::UserRewardPerTokenPaid` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::SlopeChanges` (r:2 w:2)
+	/// Proof: `BbBNC::SlopeChanges` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `System::ExecutionPhase` (r:1 w:0)
+	/// Proof: `System::ExecutionPhase` (`max_values`: Some(1), `max_size`: Some(5), added: 500, mode: `MaxEncodedLen`)
+	/// Storage: `System::EventCount` (r:1 w:1)
+	/// Proof: `System::EventCount` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `System::Events` (r:1 w:1)
+	/// Proof: `System::Events` (`max_values`: Some(1), `max_size`: None, mode: `Measured`)
+	fn increase_unlock_time() -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `1519`
+		//  Estimated: `7459`
+		// Minimum execution time: 73_319_000 picoseconds.
+		Weight::from_parts(75_675_000, 7459)
+			.saturating_add(RocksDbWeight::get().reads(20_u64))
+			.saturating_add(RocksDbWeight::get().writes(13_u64))
+	}
+	/// Storage: `BbBNC::UserPositions` (r:1 w:1)
+	/// Proof: `BbBNC::UserPositions` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::Locked` (r:1 w:1)
+	/// Proof: `BbBNC::Locked` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `System::Number` (r:1 w:0)
+	/// Proof: `System::Number` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `BbBNC::Supply` (r:1 w:1)
+	/// Proof: `BbBNC::Supply` (`max_values`: Some(1), `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::UserLocked` (r:1 w:1)
+	/// Proof: `BbBNC::UserLocked` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `Tokens::Locks` (r:1 w:1)
+	/// Proof: `Tokens::Locks` (`max_values`: None, `max_size`: Some(1271), added: 3746, mode: `MaxEncodedLen`)
+	/// Storage: `Tokens::Accounts` (r:1 w:1)
+	/// Proof: `Tokens::Accounts` (`max_values`: None, `max_size`: Some(118), added: 2593, mode: `MaxEncodedLen`)
+	/// Storage: `AssetRegistry::CurrencyMetadatas` (r:1 w:0)
+	/// Proof: `AssetRegistry::CurrencyMetadatas` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `System::Account` (r:1 w:1)
+	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
+	/// Storage: `System::ExecutionPhase` (r:1 w:0)
+	/// Proof: `System::ExecutionPhase` (`max_values`: Some(1), `max_size`: Some(5), added: 500, mode: `MaxEncodedLen`)
+	/// Storage: `System::EventCount` (r:1 w:1)
+	/// Proof: `System::EventCount` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `System::Events` (r:1 w:1)
+	/// Proof: `System::Events` (`max_values`: Some(1), `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::UserFarmingPool` (r:1 w:0)
+	/// Proof: `BbBNC::UserFarmingPool` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::IncentiveConfigs` (r:1 w:1)
+	/// Proof: `BbBNC::IncentiveConfigs` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::Epoch` (r:1 w:1)
+	/// Proof: `BbBNC::Epoch` (`max_values`: Some(1), `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::PointHistory` (r:1 w:105)
+	/// Proof: `BbBNC::PointHistory` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::SlopeChanges` (r:104 w:0)
+	/// Proof: `BbBNC::SlopeChanges` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::Rewards` (r:1 w:0)
+	/// Proof: `BbBNC::Rewards` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::UserPointHistory` (r:0 w:1)
+	/// Proof: `BbBNC::UserPointHistory` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::UserRewardPerTokenPaid` (r:0 w:1)
+	/// Proof: `BbBNC::UserRewardPerTokenPaid` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::UserPointEpoch` (r:0 w:1)
+	/// Proof: `BbBNC::UserPointEpoch` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	fn withdraw() -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `2095`
+		//  Estimated: `260485`
+		// Minimum execution time: 422_277_000 picoseconds.
+		Weight::from_parts(426_279_000, 260485)
+			.saturating_add(RocksDbWeight::get().reads(121_u64))
+			.saturating_add(RocksDbWeight::get().writes(119_u64))
+	}
+	/// Storage: `BbBNC::IncentiveConfigs` (r:1 w:1)
+	/// Proof: `BbBNC::IncentiveConfigs` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `System::Number` (r:1 w:0)
+	/// Proof: `System::Number` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `BbBNC::Epoch` (r:1 w:0)
+	/// Proof: `BbBNC::Epoch` (`max_values`: Some(1), `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::PointHistory` (r:1 w:0)
+	/// Proof: `BbBNC::PointHistory` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::SlopeChanges` (r:104 w:0)
+	/// Proof: `BbBNC::SlopeChanges` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::UserPositions` (r:1 w:0)
+	/// Proof: `BbBNC::UserPositions` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::UserPointEpoch` (r:1 w:0)
+	/// Proof: `BbBNC::UserPointEpoch` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::UserPointHistory` (r:1 w:0)
+	/// Proof: `BbBNC::UserPointHistory` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::Rewards` (r:1 w:0)
+	/// Proof: `BbBNC::Rewards` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::UserRewardPerTokenPaid` (r:0 w:1)
+	/// Proof: `BbBNC::UserRewardPerTokenPaid` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	fn get_rewards() -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `906`
+		//  Estimated: `259296`
+		// Minimum execution time: 197_445_000 picoseconds.
+		Weight::from_parts(199_705_000, 259296)
+			.saturating_add(RocksDbWeight::get().reads(112_u64))
+			.saturating_add(RocksDbWeight::get().writes(2_u64))
+	}
+	/// Storage: `BbBNC::IncentiveConfigs` (r:1 w:1)
+	/// Proof: `BbBNC::IncentiveConfigs` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `System::Number` (r:1 w:0)
+	/// Proof: `System::Number` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `System::ExecutionPhase` (r:1 w:0)
+	/// Proof: `System::ExecutionPhase` (`max_values`: Some(1), `max_size`: Some(5), added: 500, mode: `MaxEncodedLen`)
+	/// Storage: `System::EventCount` (r:1 w:1)
+	/// Proof: `System::EventCount` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `System::Events` (r:1 w:1)
+	/// Proof: `System::Events` (`max_values`: Some(1), `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::Epoch` (r:1 w:0)
+	/// Proof: `BbBNC::Epoch` (`max_values`: Some(1), `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::PointHistory` (r:1 w:0)
+	/// Proof: `BbBNC::PointHistory` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `System::Account` (r:2 w:2)
+	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
+	/// Storage: `Balances::TotalIssuance` (r:1 w:0)
+	/// Proof: `Balances::TotalIssuance` (`max_values`: Some(1), `max_size`: Some(16), added: 511, mode: `MaxEncodedLen`)
+	fn notify_rewards() -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `564`
+		//  Estimated: `6196`
+		// Minimum execution time: 47_929_000 picoseconds.
+		Weight::from_parts(48_916_000, 6196)
+			.saturating_add(RocksDbWeight::get().reads(10_u64))
+			.saturating_add(RocksDbWeight::get().writes(5_u64))
+	}
+	/// Storage: `BbBNC::TotalLock` (r:1 w:1)
+	/// Proof: `BbBNC::TotalLock` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `System::Number` (r:1 w:0)
+	/// Proof: `System::Number` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `BbBNC::MarkupCoefficient` (r:0 w:1)
+	/// Proof: `BbBNC::MarkupCoefficient` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	fn set_markup_coefficient() -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `147`
+		//  Estimated: `3612`
+		// Minimum execution time: 5_535_000 picoseconds.
+		Weight::from_parts(5_749_000, 3612)
+			.saturating_add(RocksDbWeight::get().reads(2_u64))
+			.saturating_add(RocksDbWeight::get().writes(2_u64))
+	}
+	/// Storage: `BbBNC::MarkupCoefficient` (r:1 w:0)
+	/// Proof: `BbBNC::MarkupCoefficient` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::TotalLock` (r:1 w:1)
+	/// Proof: `BbBNC::TotalLock` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `System::Number` (r:1 w:0)
+	/// Proof: `System::Number` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `BbBNC::UserMarkupInfos` (r:1 w:1)
+	/// Proof: `BbBNC::UserMarkupInfos` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::LockedTokens` (r:1 w:1)
+	/// Proof: `BbBNC::LockedTokens` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `Tokens::TotalIssuance` (r:1 w:0)
+	/// Proof: `Tokens::TotalIssuance` (`max_values`: None, `max_size`: Some(38), added: 2513, mode: `MaxEncodedLen`)
+	/// Storage: `Tokens::Locks` (r:1 w:1)
+	/// Proof: `Tokens::Locks` (`max_values`: None, `max_size`: Some(1271), added: 3746, mode: `MaxEncodedLen`)
+	/// Storage: `Tokens::Accounts` (r:1 w:1)
+	/// Proof: `Tokens::Accounts` (`max_values`: None, `max_size`: Some(118), added: 2593, mode: `MaxEncodedLen`)
+	/// Storage: `AssetRegistry::CurrencyMetadatas` (r:1 w:0)
+	/// Proof: `AssetRegistry::CurrencyMetadatas` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `System::ExecutionPhase` (r:1 w:0)
+	/// Proof: `System::ExecutionPhase` (`max_values`: Some(1), `max_size`: Some(5), added: 500, mode: `MaxEncodedLen`)
+	/// Storage: `System::EventCount` (r:1 w:1)
+	/// Proof: `System::EventCount` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `System::Events` (r:1 w:1)
+	/// Proof: `System::Events` (`max_values`: Some(1), `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::UserPositions` (r:1 w:0)
+	/// Proof: `BbBNC::UserPositions` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::Locked` (r:1 w:0)
+	/// Proof: `BbBNC::Locked` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::UserFarmingPool` (r:1 w:0)
+	/// Proof: `BbBNC::UserFarmingPool` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::IncentiveConfigs` (r:1 w:1)
+	/// Proof: `BbBNC::IncentiveConfigs` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::Epoch` (r:1 w:1)
+	/// Proof: `BbBNC::Epoch` (`max_values`: Some(1), `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::PointHistory` (r:1 w:105)
+	/// Proof: `BbBNC::PointHistory` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::SlopeChanges` (r:104 w:0)
+	/// Proof: `BbBNC::SlopeChanges` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::UserPointEpoch` (r:1 w:1)
+	/// Proof: `BbBNC::UserPointEpoch` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::UserPointHistory` (r:1 w:1)
+	/// Proof: `BbBNC::UserPointHistory` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::Rewards` (r:1 w:0)
+	/// Proof: `BbBNC::Rewards` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::Supply` (r:1 w:0)
+	/// Proof: `BbBNC::Supply` (`max_values`: Some(1), `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::UserRewardPerTokenPaid` (r:0 w:1)
+	/// Proof: `BbBNC::UserRewardPerTokenPaid` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	fn deposit_markup() -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `2304`
+		//  Estimated: `260694`
+		// Minimum execution time: 431_166_000 picoseconds.
+		Weight::from_parts(440_160_000, 260694)
+			.saturating_add(RocksDbWeight::get().reads(126_u64))
+			.saturating_add(RocksDbWeight::get().writes(117_u64))
+	}
+	/// Storage: `BbBNC::MarkupCoefficient` (r:1 w:0)
+	/// Proof: `BbBNC::MarkupCoefficient` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::UserMarkupInfos` (r:1 w:1)
+	/// Proof: `BbBNC::UserMarkupInfos` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::LockedTokens` (r:1 w:1)
+	/// Proof: `BbBNC::LockedTokens` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::TotalLock` (r:1 w:1)
+	/// Proof: `BbBNC::TotalLock` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `Tokens::Locks` (r:1 w:1)
+	/// Proof: `Tokens::Locks` (`max_values`: None, `max_size`: Some(1271), added: 3746, mode: `MaxEncodedLen`)
+	/// Storage: `Tokens::Accounts` (r:1 w:1)
+	/// Proof: `Tokens::Accounts` (`max_values`: None, `max_size`: Some(118), added: 2593, mode: `MaxEncodedLen`)
+	/// Storage: `AssetRegistry::CurrencyMetadatas` (r:1 w:0)
+	/// Proof: `AssetRegistry::CurrencyMetadatas` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `System::Number` (r:1 w:0)
+	/// Proof: `System::Number` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `System::ExecutionPhase` (r:1 w:0)
+	/// Proof: `System::ExecutionPhase` (`max_values`: Some(1), `max_size`: Some(5), added: 500, mode: `MaxEncodedLen`)
+	/// Storage: `System::EventCount` (r:1 w:1)
+	/// Proof: `System::EventCount` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `System::Events` (r:1 w:1)
+	/// Proof: `System::Events` (`max_values`: Some(1), `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::UserPositions` (r:1 w:0)
+	/// Proof: `BbBNC::UserPositions` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::Locked` (r:1 w:0)
+	/// Proof: `BbBNC::Locked` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::UserFarmingPool` (r:1 w:0)
+	/// Proof: `BbBNC::UserFarmingPool` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::IncentiveConfigs` (r:1 w:1)
+	/// Proof: `BbBNC::IncentiveConfigs` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::Epoch` (r:1 w:1)
+	/// Proof: `BbBNC::Epoch` (`max_values`: Some(1), `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::PointHistory` (r:1 w:105)
+	/// Proof: `BbBNC::PointHistory` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::SlopeChanges` (r:104 w:0)
+	/// Proof: `BbBNC::SlopeChanges` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::UserPointEpoch` (r:1 w:1)
+	/// Proof: `BbBNC::UserPointEpoch` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::UserPointHistory` (r:1 w:1)
+	/// Proof: `BbBNC::UserPointHistory` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::Rewards` (r:1 w:1)
+	/// Proof: `BbBNC::Rewards` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::UserRewardPerTokenPaid` (r:1 w:1)
+	/// Proof: `BbBNC::UserRewardPerTokenPaid` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::Supply` (r:1 w:0)
+	/// Proof: `BbBNC::Supply` (`max_values`: Some(1), `max_size`: None, mode: `Measured`)
+	fn withdraw_markup() -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `2731`
+		//  Estimated: `261121`
+		// Minimum execution time: 435_907_000 picoseconds.
+		Weight::from_parts(442_669_000, 261121)
+			.saturating_add(RocksDbWeight::get().reads(126_u64))
+			.saturating_add(RocksDbWeight::get().writes(118_u64))
+	}
+	/// Storage: `BbBNC::Locked` (r:1 w:1)
+	/// Proof: `BbBNC::Locked` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `System::Number` (r:1 w:0)
+	/// Proof: `System::Number` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `BbBNC::Supply` (r:1 w:1)
+	/// Proof: `BbBNC::Supply` (`max_values`: Some(1), `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::UserPositions` (r:1 w:1)
+	/// Proof: `BbBNC::UserPositions` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::UserLocked` (r:1 w:1)
+	/// Proof: `BbBNC::UserLocked` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `Tokens::Locks` (r:1 w:1)
+	/// Proof: `Tokens::Locks` (`max_values`: None, `max_size`: Some(1271), added: 3746, mode: `MaxEncodedLen`)
+	/// Storage: `Tokens::Accounts` (r:2 w:2)
+	/// Proof: `Tokens::Accounts` (`max_values`: None, `max_size`: Some(118), added: 2593, mode: `MaxEncodedLen`)
+	/// Storage: `AssetRegistry::CurrencyMetadatas` (r:1 w:0)
+	/// Proof: `AssetRegistry::CurrencyMetadatas` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `System::ExecutionPhase` (r:1 w:0)
+	/// Proof: `System::ExecutionPhase` (`max_values`: Some(1), `max_size`: Some(5), added: 500, mode: `MaxEncodedLen`)
+	/// Storage: `System::EventCount` (r:1 w:1)
+	/// Proof: `System::EventCount` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `System::Events` (r:1 w:1)
+	/// Proof: `System::Events` (`max_values`: Some(1), `max_size`: None, mode: `Measured`)
+	/// Storage: `System::Account` (r:2 w:1)
+	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
+	/// Storage: `BbBNC::UserFarmingPool` (r:1 w:0)
+	/// Proof: `BbBNC::UserFarmingPool` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::IncentiveConfigs` (r:1 w:1)
+	/// Proof: `BbBNC::IncentiveConfigs` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::Epoch` (r:1 w:1)
+	/// Proof: `BbBNC::Epoch` (`max_values`: Some(1), `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::PointHistory` (r:1 w:1)
+	/// Proof: `BbBNC::PointHistory` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::Rewards` (r:1 w:1)
+	/// Proof: `BbBNC::Rewards` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::UserRewardPerTokenPaid` (r:1 w:1)
+	/// Proof: `BbBNC::UserRewardPerTokenPaid` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::SlopeChanges` (r:1 w:1)
+	/// Proof: `BbBNC::SlopeChanges` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::UserPointHistory` (r:0 w:1)
+	/// Proof: `BbBNC::UserPointHistory` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::UserPointEpoch` (r:0 w:1)
+	/// Proof: `BbBNC::UserPointEpoch` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	fn redeem_unlock() -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `2656`
+		//  Estimated: `6196`
+		// Minimum execution time: 104_655_000 picoseconds.
+		Weight::from_parts(107_284_000, 6196)
+			.saturating_add(RocksDbWeight::get().reads(21_u64))
+			.saturating_add(RocksDbWeight::get().writes(18_u64))
+	}
+	/// Storage: `BbBNC::MarkupCoefficient` (r:1 w:0)
+	/// Proof: `BbBNC::MarkupCoefficient` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `System::Number` (r:1 w:0)
+	/// Proof: `System::Number` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `BbBNC::LockedTokens` (r:2 w:1)
+	/// Proof: `BbBNC::LockedTokens` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::TotalLock` (r:1 w:0)
+	/// Proof: `BbBNC::TotalLock` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `Tokens::TotalIssuance` (r:1 w:0)
+	/// Proof: `Tokens::TotalIssuance` (`max_values`: None, `max_size`: Some(38), added: 2513, mode: `MaxEncodedLen`)
+	/// Storage: `BbBNC::UserMarkupInfos` (r:1 w:1)
+	/// Proof: `BbBNC::UserMarkupInfos` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::UserPositions` (r:1 w:0)
+	/// Proof: `BbBNC::UserPositions` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::Locked` (r:1 w:0)
+	/// Proof: `BbBNC::Locked` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::UserFarmingPool` (r:1 w:0)
+	/// Proof: `BbBNC::UserFarmingPool` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::IncentiveConfigs` (r:1 w:1)
+	/// Proof: `BbBNC::IncentiveConfigs` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::Epoch` (r:1 w:1)
+	/// Proof: `BbBNC::Epoch` (`max_values`: Some(1), `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::PointHistory` (r:1 w:1)
+	/// Proof: `BbBNC::PointHistory` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::UserPointEpoch` (r:1 w:1)
+	/// Proof: `BbBNC::UserPointEpoch` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::UserPointHistory` (r:1 w:1)
+	/// Proof: `BbBNC::UserPointHistory` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::Rewards` (r:1 w:1)
+	/// Proof: `BbBNC::Rewards` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::UserRewardPerTokenPaid` (r:1 w:1)
+	/// Proof: `BbBNC::UserRewardPerTokenPaid` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::SlopeChanges` (r:1 w:1)
+	/// Proof: `BbBNC::SlopeChanges` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BbBNC::Supply` (r:1 w:0)
+	/// Proof: `BbBNC::Supply` (`max_values`: Some(1), `max_size`: None, mode: `Measured`)
+	/// Storage: `System::ExecutionPhase` (r:1 w:0)
+	/// Proof: `System::ExecutionPhase` (`max_values`: Some(1), `max_size`: Some(5), added: 500, mode: `MaxEncodedLen`)
+	/// Storage: `System::EventCount` (r:1 w:1)
+	/// Proof: `System::EventCount` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `System::Events` (r:1 w:1)
+	/// Proof: `System::Events` (`max_values`: Some(1), `max_size`: None, mode: `Measured`)
+	fn refresh() -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `1804`
+		//  Estimated: `7744`
+		// Minimum execution time: 86_873_000 picoseconds.
+		Weight::from_parts(88_213_000, 7744)
+			.saturating_add(RocksDbWeight::get().reads(22_u64))
+			.saturating_add(RocksDbWeight::get().writes(12_u64))
 	}
 }
