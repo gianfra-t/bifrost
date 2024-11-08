@@ -24,6 +24,9 @@ sp-version = { workspace = true }
 sp-consensus-aura = { workspace = true }
 sp-arithmetic = { workspace = true }
 sp-io = { workspace = true }
+num-traits = { workspace = true }
+scale-info = { workspace = true }
+serde = { workspace = true }
 
 # frame dependencies
 frame-executive = { workspace = true }
@@ -38,13 +41,13 @@ pallet-scheduler  = { workspace = true }
 pallet-treasury = { workspace = true }
 pallet-democracy = { workspace = true }
 pallet-multisig = { workspace = true }
+pallet-traits = { workspace = true }
 
 # Cumulus dependencies
 cumulus-pallet-parachain-system = { workspace = true }
 cumulus-primitives-core = { workspace = true }
 cumulus-primitives-timestamp = { workspace = true }
 cumulus-primitives-utility = { workspace = true }
-cumulus-pallet-dmp-queue = { workspace = true }
 cumulus-pallet-xcmp-queue = { workspace = true }
 cumulus-pallet-xcm = { workspace = true }
 parachain-info = { workspace = true }
@@ -93,11 +96,11 @@ std = [
 	"pallet-democracy/std",
 	"pallet-multisig/std",
 	"pallet-membership/std",
+	"pallet-traits/std",
 	"pallet-utility/std",
 	"pallet-treasury/std",
 	"pallet-scheduler/std",
 	"pallet-transaction-payment/std",
-	"cumulus-pallet-dmp-queue/std",
 	"cumulus-pallet-parachain-system/std",
 	"cumulus-pallet-xcmp-queue/std",
 	"cumulus-pallet-xcm/std",

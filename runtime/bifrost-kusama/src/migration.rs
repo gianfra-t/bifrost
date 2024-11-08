@@ -267,3 +267,481 @@ pub mod slpx_migrates_whitelist {
 		}
 	}
 }
+
+pub mod opengov {
+	use super::*;
+	use pallet_ranked_collective::{Config, IdToIndex, IndexToId};
+	use sp_core::crypto::Ss58Codec;
+
+	pub struct RankedCollectiveV1<T, I = ()>(PhantomData<(T, I)>);
+	impl<T: Config<I>, I: 'static> OnRuntimeUpgrade for RankedCollectiveV1<T, I>
+	where
+		AccountId:
+			Ss58Codec + parity_scale_codec::EncodeLike<<T as frame_system::Config>::AccountId>,
+	{
+		fn on_runtime_upgrade() -> Weight {
+			let remove_member =
+				AccountId::from_ss58check("cYPu6g4apwndq26ryA4gFjW7us5LdcpCnzgkeFyxdgu5aop")
+					.unwrap();
+			let demote_member1 =
+				AccountId::from_ss58check("fXznm8JzrUuyEijnyy8M2tfdFQeot2bUrERe3ZK9FwTaZZw")
+					.unwrap();
+			let demote_member2 =
+				AccountId::from_ss58check("fAGgdvAYwqCwpt3Wda1mzpACnNyESbfgfgvm1RLSudBsUEu")
+					.unwrap();
+			IdToIndex::<T, I>::remove(5, demote_member1.clone());
+			IdToIndex::<T, I>::remove(5, demote_member2.clone());
+			IdToIndex::<T, I>::remove(6, demote_member1.clone());
+			IdToIndex::<T, I>::remove(6, demote_member2.clone());
+			IdToIndex::<T, I>::remove(0, remove_member.clone());
+			IdToIndex::<T, I>::remove(1, remove_member.clone());
+			IdToIndex::<T, I>::remove(2, remove_member.clone());
+			IdToIndex::<T, I>::remove(3, remove_member.clone());
+			IdToIndex::<T, I>::remove(4, remove_member.clone());
+			IdToIndex::<T, I>::remove(5, remove_member.clone());
+			IdToIndex::<T, I>::remove(6, remove_member.clone());
+
+			IndexToId::<T, I>::remove(2, 14);
+			IndexToId::<T, I>::remove(3, 10);
+			IndexToId::<T, I>::remove(4, 7);
+
+			IndexToId::<T, I>::remove(5, 2);
+			IndexToId::<T, I>::remove(5, 3);
+			IndexToId::<T, I>::remove(5, 4);
+			IndexToId::<T, I>::remove(6, 2);
+			IndexToId::<T, I>::remove(6, 3);
+			IndexToId::<T, I>::remove(6, 4);
+			Weight::from(<Runtime as frame_system::Config>::DbWeight::get().writes(20u64))
+		}
+
+		#[cfg(feature = "try-runtime")]
+		fn post_upgrade(_state: Vec<u8>) -> Result<(), TryRuntimeError> {
+			let rank6_member =
+				AccountId::from_ss58check("hJmectFjn7CCEQL1tKDxvboA1i9hcfTyUrLuW3xjDqRgxmm")
+					.unwrap();
+			let remove_member =
+				AccountId::from_ss58check("cYPu6g4apwndq26ryA4gFjW7us5LdcpCnzgkeFyxdgu5aop")
+					.unwrap();
+			let demote_member1 =
+				AccountId::from_ss58check("fXznm8JzrUuyEijnyy8M2tfdFQeot2bUrERe3ZK9FwTaZZw")
+					.unwrap();
+			let demote_member2 =
+				AccountId::from_ss58check("fAGgdvAYwqCwpt3Wda1mzpACnNyESbfgfgvm1RLSudBsUEu")
+					.unwrap();
+			assert_eq!(IdToIndex::<T, I>::get(5, rank6_member.clone()), Some(0));
+			assert_eq!(IdToIndex::<T, I>::get(6, rank6_member.clone()), Some(0));
+			assert_eq!(IndexToId::<T, I>::get(5, 2), None);
+			assert_eq!(IndexToId::<T, I>::get(5, 3), None);
+			assert_eq!(IndexToId::<T, I>::get(5, 4), None);
+			assert_eq!(IndexToId::<T, I>::get(6, 2), None);
+			assert_eq!(IndexToId::<T, I>::get(6, 3), None);
+			assert_eq!(IndexToId::<T, I>::get(6, 4), None);
+
+			assert_eq!(IndexToId::<T, I>::get(4, 7), None);
+			assert_eq!(IndexToId::<T, I>::get(4, 8), None);
+			assert_eq!(IndexToId::<T, I>::get(3, 10), None);
+			assert_eq!(IndexToId::<T, I>::get(3, 11), None);
+			assert_eq!(IndexToId::<T, I>::get(2, 14), None);
+			assert_eq!(IndexToId::<T, I>::get(1, 19), None);
+			assert_eq!(IndexToId::<T, I>::get(0, 19), None);
+
+			let deserialize_to_account_id32 = |account_id: T::AccountId| -> AccountId {
+				let encoded = account_id.encode();
+				AccountId::decode(&mut &encoded[..]).expect("Failed to decode AccountId")
+			};
+			assert_eq!(
+				IndexToId::<T, I>::get(5, 0).map(deserialize_to_account_id32),
+				Some(rank6_member)
+			);
+			assert_eq!(IdToIndex::<T, I>::get(5, demote_member1.clone()), None);
+			assert_eq!(IdToIndex::<T, I>::get(6, demote_member1.clone()), None);
+			assert_eq!(IdToIndex::<T, I>::get(5, demote_member2.clone()), None);
+			assert_eq!(IdToIndex::<T, I>::get(6, demote_member2.clone()), None);
+
+			assert_eq!(IdToIndex::<T, I>::get(0, remove_member.clone()), None);
+			assert_eq!(IdToIndex::<T, I>::get(1, remove_member.clone()), None);
+			assert_eq!(IdToIndex::<T, I>::get(2, remove_member.clone()), None);
+			assert_eq!(IdToIndex::<T, I>::get(3, remove_member.clone()), None);
+			assert_eq!(IdToIndex::<T, I>::get(4, remove_member.clone()), None);
+			assert_eq!(IdToIndex::<T, I>::get(5, remove_member.clone()), None);
+			assert_eq!(IdToIndex::<T, I>::get(6, remove_member.clone()), None);
+
+			Ok(())
+		}
+	}
+}
+
+pub mod system_maker {
+	use super::*;
+	pub use bifrost_primitives::currency::{KSM, VKSM};
+	use frame_support::{pallet_prelude::PhantomData, traits::OnRuntimeUpgrade};
+	use sp_core::Get;
+	pub struct SystemMakerClearPalletId<T>(PhantomData<T>);
+	impl<T: bifrost_vtoken_minting::Config> OnRuntimeUpgrade for SystemMakerClearPalletId<T> {
+		#[cfg(feature = "try-runtime")]
+		fn pre_upgrade() -> Result<sp_std::prelude::Vec<u8>, sp_runtime::DispatchError> {
+			#[allow(unused_imports)]
+			use frame_support::PalletId;
+			log::info!("Bifrost SystemMakerClearPalletId `pre_upgrade`...");
+
+			Ok(vec![])
+		}
+
+		fn on_runtime_upgrade() -> Weight {
+			log::info!("Bifrost SystemMakerClearPalletId `on_runtime_upgrade`...");
+
+			let account_id = SystemMakerPalletId::get().into_account_truncating();
+			let ksm_balance = T::MultiCurrency::free_balance(KSM, &account_id);
+			T::MultiCurrency::transfer(
+				KSM,
+				&account_id,
+				&TreasuryPalletId::get().into_account_truncating(),
+				ksm_balance,
+			)
+			.ok();
+			let vksm_balance = T::MultiCurrency::free_balance(VKSM, &account_id);
+			T::MultiCurrency::transfer(
+				VKSM,
+				&account_id,
+				&TreasuryPalletId::get().into_account_truncating(),
+				vksm_balance,
+			)
+			.ok();
+			log::info!("KSM balance: {:?}", ksm_balance);
+			log::info!("VKSM balance: {:?}", vksm_balance);
+
+			log::info!("Bifrost SystemMakerClearPalletId `on_runtime_upgrade finished`");
+
+			Weight::from(T::DbWeight::get().reads_writes(1, 1))
+		}
+
+		#[cfg(feature = "try-runtime")]
+		fn post_upgrade(_: sp_std::prelude::Vec<u8>) -> Result<(), sp_runtime::DispatchError> {
+			log::info!("Bifrost SystemMakerClearPalletId `post_upgrade`...");
+			let account_id = SystemMakerPalletId::get().into_account_truncating();
+			let ksm_balance = T::MultiCurrency::free_balance(KSM, &account_id);
+			assert_eq!(ksm_balance, Zero::zero());
+			let vksm_balance = T::MultiCurrency::free_balance(VKSM, &account_id);
+			assert_eq!(vksm_balance, Zero::zero());
+
+			Ok(())
+		}
+	}
+}
+
+pub mod vsbond_auction {
+	use super::*;
+	pub use bifrost_primitives::currency::{BNC, KSM};
+	use bifrost_primitives::VsbondAuctionPalletId;
+	use frame_support::{pallet_prelude::PhantomData, traits::OnRuntimeUpgrade};
+	use sp_core::Get;
+
+	pub struct VSBondAuctionClearPalletId<T>(PhantomData<T>);
+	impl<T: bifrost_vtoken_minting::Config> OnRuntimeUpgrade for VSBondAuctionClearPalletId<T> {
+		#[cfg(feature = "try-runtime")]
+		fn pre_upgrade() -> Result<sp_std::prelude::Vec<u8>, sp_runtime::DispatchError> {
+			log::info!("Bifrost VSBondAuctionClearPalletId `pre_upgrade`...");
+
+			Ok(vec![])
+		}
+
+		fn on_runtime_upgrade() -> Weight {
+			log::info!("Bifrost VSBondAuctionClearPalletId `on_runtime_upgrade`...");
+
+			let account_id = VsbondAuctionPalletId::get().into_account_truncating();
+			let mut count: u64 = 0;
+
+			let bnc_balance = T::MultiCurrency::free_balance(BNC, &account_id);
+			if !bnc_balance.is_zero() {
+				match T::MultiCurrency::transfer(
+					BNC,
+					&account_id,
+					&TreasuryPalletId::get().into_account_truncating(),
+					bnc_balance,
+				) {
+					Ok(_) => {
+						count += 1;
+						log::info!("Transfer successful: {:?} of BNC transferred", bnc_balance);
+					},
+					Err(e) => {
+						log::error!("Failed to transfer {:?} of BNC: {:?}", bnc_balance, e);
+					},
+				}
+			} else {
+				log::info!("No transfer needed for BNC as the balance is 0");
+			}
+
+			let ksm_balance = T::MultiCurrency::free_balance(KSM, &account_id);
+			if !ksm_balance.is_zero() {
+				match T::MultiCurrency::transfer(
+					KSM,
+					&account_id,
+					&TreasuryPalletId::get().into_account_truncating(),
+					ksm_balance,
+				) {
+					Ok(_) => {
+						count += 1;
+						log::info!("Transfer successful: {:?} of KSM transferred", ksm_balance);
+					},
+					Err(e) => {
+						log::error!("Failed to transfer {:?} of KSM: {:?}", ksm_balance, e);
+					},
+				}
+			} else {
+				log::info!("No transfer needed for KSM as the balance is 0");
+			}
+
+			let vs_bond_1 = CurrencyId::VSBond(TokenSymbol::KSM, 2092, 15, 22);
+			let vs_bond_1_balance = T::MultiCurrency::free_balance(vs_bond_1, &account_id);
+			if !vs_bond_1_balance.is_zero() {
+				match T::MultiCurrency::transfer(
+					vs_bond_1,
+					&account_id,
+					&TreasuryPalletId::get().into_account_truncating(),
+					vs_bond_1_balance,
+				) {
+					Ok(_) => {
+						count += 1;
+						log::info!(
+							"Transfer successful: {:?} of VSBond(TokenSymbol::KSM, 2092, 15, 22); transferred",
+							vs_bond_1_balance
+						);
+					},
+					Err(e) => {
+						log::error!(
+							"Failed to transfer {:?} of VSBond(TokenSymbol::KSM, 2092, 15, 22);: {:?}",
+							vs_bond_1_balance,
+							e
+						);
+					},
+				}
+			} else {
+				log::info!("No transfer needed for VSBond(TokenSymbol::KSM, 2092, 15, 22) as the balance is 0");
+			}
+
+			let vs_bond_2 = CurrencyId::VSBond(TokenSymbol::KSM, 2096, 17, 24);
+			let vs_bond_2_balance = T::MultiCurrency::free_balance(vs_bond_2, &account_id);
+			if !vs_bond_2_balance.is_zero() {
+				match T::MultiCurrency::transfer(
+					vs_bond_2,
+					&account_id,
+					&TreasuryPalletId::get().into_account_truncating(),
+					vs_bond_2_balance,
+				) {
+					Ok(_) => {
+						count += 1;
+						log::info!(
+							"Transfer successful: {:?} of VSBond(TokenSymbol::KSM, 2096, 17, 24) transferred",
+							vs_bond_2_balance
+						);
+					},
+					Err(e) => {
+						log::error!(
+							"Failed to transfer {:?} of VSBond(TokenSymbol::KSM, 2096, 17, 24): {:?}",
+							vs_bond_2_balance,
+							e
+						);
+					},
+				}
+			} else {
+				log::info!("No transfer needed for VSBond(TokenSymbol::KSM, 2096, 17, 24) as the balance is 0");
+			}
+
+			let vs_bond_3 = CurrencyId::VSBond(TokenSymbol::KSM, 2100, 18, 25);
+			let vs_bond_3_balance = T::MultiCurrency::free_balance(vs_bond_3, &account_id);
+			if !vs_bond_3_balance.is_zero() {
+				match T::MultiCurrency::transfer(
+					vs_bond_3,
+					&account_id,
+					&TreasuryPalletId::get().into_account_truncating(),
+					vs_bond_3_balance,
+				) {
+					Ok(_) => {
+						count += 1;
+						log::info!(
+							"Transfer successful: {:?} of VSBond(TokenSymbol::KSM, 2100, 18, 25) transferred",
+							vs_bond_3_balance
+						);
+					},
+					Err(e) => {
+						log::error!(
+							"Failed to transfer {:?} of VSBond(TokenSymbol::KSM, 2100, 18, 25): {:?}",
+							vs_bond_3_balance,
+							e
+						);
+					},
+				}
+			} else {
+				log::info!("No transfer needed for VSBond(TokenSymbol::KSM, 2100, 18, 25) as the balance is 0");
+			}
+
+			let vs_bond_4 = CurrencyId::VSBond(TokenSymbol::KSM, 2125, 23, 30);
+			let vs_bond_4_balance = T::MultiCurrency::free_balance(vs_bond_4, &account_id);
+			if !vs_bond_4_balance.is_zero() {
+				match T::MultiCurrency::transfer(
+					vs_bond_4,
+					&account_id,
+					&TreasuryPalletId::get().into_account_truncating(),
+					vs_bond_4_balance,
+				) {
+					Ok(_) => {
+						count += 1;
+						log::info!(
+							"Transfer successful: {:?} of VSBond(TokenSymbol::KSM, 2125, 23, 30) transferred",
+							vs_bond_4_balance
+						);
+					},
+					Err(e) => {
+						log::error!(
+							"Failed to transfer {:?} of VSBond(TokenSymbol::KSM, 2125, 23, 30): {:?}",
+							vs_bond_4_balance,
+							e
+						);
+					},
+				}
+			} else {
+				log::info!("No transfer needed for VSBond(TokenSymbol::KSM, 2125, 23, 30) as the balance is 0");
+			}
+
+			let vs_bond_5 = CurrencyId::VSBond(TokenSymbol::KSM, 2114, 20, 27);
+			let vs_bond_5_balance = T::MultiCurrency::free_balance(vs_bond_5, &account_id);
+			if !vs_bond_5_balance.is_zero() {
+				match T::MultiCurrency::transfer(
+					vs_bond_5,
+					&account_id,
+					&TreasuryPalletId::get().into_account_truncating(),
+					vs_bond_5_balance,
+				) {
+					Ok(_) => {
+						count += 1;
+						log::info!(
+							"Transfer successful: {:?} of VSBond(TokenSymbol::KSM, 2114, 20, 27) transferred",
+							vs_bond_5_balance
+						);
+					},
+					Err(e) => {
+						log::error!(
+							"Failed to transfer {:?} of VSBond(TokenSymbol::KSM, 2114, 20, 27): {:?}",
+							vs_bond_5_balance,
+							e
+						);
+					},
+				}
+			} else {
+				log::info!("No transfer needed for VSBond(TokenSymbol::KSM, 2114, 20, 27) as the balance is 0");
+			}
+
+			let vs_bond_6 = CurrencyId::VSBond(TokenSymbol::KSM, 2118, 22, 29);
+			let vs_bond_6_balance = T::MultiCurrency::free_balance(vs_bond_6, &account_id);
+			if !vs_bond_6_balance.is_zero() {
+				match T::MultiCurrency::transfer(
+					vs_bond_6,
+					&account_id,
+					&TreasuryPalletId::get().into_account_truncating(),
+					vs_bond_6_balance,
+				) {
+					Ok(_) => {
+						count += 1;
+						log::info!(
+							"Transfer successful: {:?} of VSBond(TokenSymbol::KSM, 2118, 22, 29) transferred",
+							vs_bond_6_balance
+						);
+					},
+					Err(e) => {
+						log::error!(
+							"Failed to transfer {:?} of VSBond(TokenSymbol::KSM, 2118, 22, 29): {:?}",
+							vs_bond_6_balance,
+							e
+						);
+					},
+				}
+			} else {
+				log::info!("No transfer needed for VSBond(TokenSymbol::KSM, 2118, 22, 29) as the balance is 0");
+			}
+
+			let vs_bond_7 = CurrencyId::VSBond(TokenSymbol::BNC, 2001, 13, 20);
+			let vs_bond_7_balance = T::MultiCurrency::free_balance(vs_bond_7, &account_id);
+			if !vs_bond_7_balance.is_zero() {
+				match T::MultiCurrency::transfer(
+					vs_bond_7,
+					&account_id,
+					&TreasuryPalletId::get().into_account_truncating(),
+					vs_bond_7_balance,
+				) {
+					Ok(_) => {
+						count += 1;
+						log::info!(
+							"Transfer successful: {:?} of VSBond(TokenSymbol::BNC, 2001, 13, 20) transferred",
+							vs_bond_7_balance
+						);
+					},
+					Err(e) => {
+						log::error!(
+							"Failed to transfer {:?} of VSBond(TokenSymbol::BNC, 2001, 13, 20): {:?}",
+							vs_bond_7_balance,
+							e
+						);
+					},
+				}
+			} else {
+				log::info!("No transfer needed for VSBond(TokenSymbol::BNC, 2001, 13, 20) as the balance is 0");
+			}
+
+			log::info!("BNC balance: {:?}", bnc_balance);
+			log::info!("KSM balance: {:?}", ksm_balance);
+			log::info!("vs_bond_1_balance balance: {:?}", vs_bond_1_balance);
+			log::info!("vs_bond_2_balance balance: {:?}", vs_bond_2_balance);
+			log::info!("vs_bond_3_balance balance: {:?}", vs_bond_3_balance);
+			log::info!("vs_bond_4_balance balance: {:?}", vs_bond_4_balance);
+			log::info!("vs_bond_5_balance balance: {:?}", vs_bond_5_balance);
+			log::info!("vs_bond_6_balance balance: {:?}", vs_bond_6_balance);
+			log::info!("vs_bond_7_balance balance: {:?}", vs_bond_7_balance);
+
+			log::info!("Bifrost VSBondAuctionClearPalletId `on_runtime_upgrade finished`");
+
+			Weight::from(T::DbWeight::get().reads_writes(count + 1, 10))
+		}
+
+		#[cfg(feature = "try-runtime")]
+		fn post_upgrade(_: sp_std::prelude::Vec<u8>) -> Result<(), sp_runtime::DispatchError> {
+			log::info!("Bifrost VSBondAuctionClearPalletId `post_upgrade`...");
+			let account_id = VsbondAuctionPalletId::get().into_account_truncating();
+
+			let bnc_balance = T::MultiCurrency::free_balance(BNC, &account_id);
+			assert_eq!(bnc_balance, Zero::zero());
+
+			let ksm_balance = T::MultiCurrency::free_balance(KSM, &account_id);
+			assert_eq!(ksm_balance, Zero::zero());
+
+			let vs_bond_1 = CurrencyId::VSBond(TokenSymbol::KSM, 2092, 15, 22);
+			let vs_bond_1_balance = T::MultiCurrency::free_balance(vs_bond_1, &account_id);
+			assert_eq!(vs_bond_1_balance, Zero::zero());
+
+			let vs_bond_2 = CurrencyId::VSBond(TokenSymbol::KSM, 2096, 17, 24);
+			let vs_bond_2_balance = T::MultiCurrency::free_balance(vs_bond_2, &account_id);
+			assert_eq!(vs_bond_2_balance, Zero::zero());
+
+			let vs_bond_3 = CurrencyId::VSBond(TokenSymbol::KSM, 2100, 18, 25);
+			let vs_bond_3_balance = T::MultiCurrency::free_balance(vs_bond_3, &account_id);
+			assert_eq!(vs_bond_3_balance, Zero::zero());
+
+			let vs_bond_4 = CurrencyId::VSBond(TokenSymbol::KSM, 2125, 23, 30);
+			let vs_bond_4_balance = T::MultiCurrency::free_balance(vs_bond_4, &account_id);
+			assert_eq!(vs_bond_4_balance, Zero::zero());
+
+			let vs_bond_5 = CurrencyId::VSBond(TokenSymbol::KSM, 2114, 20, 27);
+			let vs_bond_5_balance = T::MultiCurrency::free_balance(vs_bond_5, &account_id);
+			assert_eq!(vs_bond_5_balance, Zero::zero());
+
+			let vs_bond_6 = CurrencyId::VSBond(TokenSymbol::KSM, 2118, 22, 29);
+			let vs_bond_6_balance = T::MultiCurrency::free_balance(vs_bond_6, &account_id);
+			assert_eq!(vs_bond_6_balance, Zero::zero());
+
+			let vs_bond_7 = CurrencyId::VSBond(TokenSymbol::BNC, 2001, 13, 20);
+			let vs_bond_7_balance = T::MultiCurrency::free_balance(vs_bond_7, &account_id);
+			assert_eq!(vs_bond_7_balance, Zero::zero());
+
+			Ok(())
+		}
+	}
+}

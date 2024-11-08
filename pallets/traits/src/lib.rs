@@ -1,20 +1,17 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use bifrost_primitives::{CurrencyId, PriceDetail};
 use num_bigint::{BigUint, ToBigUint};
 
+pub mod evm;
 pub mod lend_market;
+
 pub use lend_market::*;
 
 pub trait EmergencyCallFilter<Call> {
 	fn contains(call: &Call) -> bool;
 }
 
-pub trait PriceFeeder {
-	fn get_price(asset_id: &CurrencyId) -> Option<PriceDetail>;
-}
-
-pub trait EmergencyPriceFeeder<CurrencyId, Price> {
+pub trait EmergencyOraclePriceProvider<CurrencyId, Price> {
 	fn set_emergency_price(asset_id: CurrencyId, price: Price);
 	fn reset_emergency_price(asset_id: CurrencyId);
 }

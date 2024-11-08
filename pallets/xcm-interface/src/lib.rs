@@ -18,128 +18,88 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarking;
+
 pub mod calls;
-pub mod traits;
+pub mod weights;
+pub use weights::WeightInfo;
+mod mock;
+mod tests;
+
+use crate::calls::{AssetHubCall, PolkadotXcmCall};
 use bifrost_asset_registry::AssetMetadata;
-use bifrost_primitives::{traits::XcmDestWeightAndFeeHandler, CurrencyIdMapping, XcmOperationType};
-pub use calls::*;
+use bifrost_primitives::{
+	traits::XcmDestWeightAndFeeHandler, AssetHubLocation, CurrencyId, CurrencyIdMapping,
+	EthereumLocation, XcmOperationType,
+};
+use cumulus_primitives_core::ParaId;
+use frame_support::pallet_prelude::*;
+use frame_system::pallet_prelude::*;
 use orml_traits::MultiCurrency;
 pub use pallet::*;
-pub use traits::{ChainId, MessageId, Nonce, SalpHelper};
+use sp_core::H160;
+use sp_runtime::traits::{Convert, UniqueSaturatedInto};
+use sp_std::{convert::From, prelude::*, vec, vec::Vec};
+use xcm::{
+	v4::{prelude::*, Asset, Location},
+	DoubleEncoded,
+};
 
-macro_rules! use_relay {
-    ({ $( $code:tt )* }) => {
-        if T::RelayNetwork::get() == NetworkId::Polkadot {
-            use polkadot::RelaychainCall;
-
-			$( $code )*
-        } else if T::RelayNetwork::get() == NetworkId::Kusama {
-            use kusama::RelaychainCall;
-
-			$( $code )*
-        } else if T::RelayNetwork::get() == NetworkId::Rococo {
-            use rococo::RelaychainCall;
-
-			$( $code )*
-        } else {
-            unreachable!()
-        }
-    }
-}
-
-pub(crate) type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
-
-pub type CurrencyIdOf<T> =
-	<<T as Config>::MultiCurrency as MultiCurrency<AccountIdOf<T>>>::CurrencyId;
-
-pub type BalanceOf<T> = <<T as Config>::MultiCurrency as MultiCurrency<AccountIdOf<T>>>::Balance;
+type BalanceOf<T> = <<T as Config>::MultiCurrency as MultiCurrency<
+	<T as frame_system::Config>::AccountId,
+>>::Balance;
 
 #[frame_support::pallet]
 pub mod pallet {
-	use cumulus_primitives_core::ParaId;
-	use frame_support::pallet_prelude::*;
-	use frame_system::pallet_prelude::*;
-	use orml_traits::{currency::TransferAll, MultiCurrency, MultiReservableCurrency};
-	use sp_runtime::{traits::Convert, DispatchError};
-	use sp_std::{convert::From, prelude::*, vec, vec::Vec};
-	use xcm::{
-		v4::{prelude::*, Asset, ExecuteXcm, Location},
-		DoubleEncoded, VersionedXcm,
-	};
-
 	use super::*;
-	use crate::traits::*;
 
 	#[pallet::config]
-	pub trait Config: frame_system::Config + pallet_xcm::Config {
+	pub trait Config: frame_system::Config {
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
-		type MultiCurrency: TransferAll<AccountIdOf<Self>>
-			+ MultiCurrency<AccountIdOf<Self>>
-			+ MultiReservableCurrency<AccountIdOf<Self>>;
+		type MultiCurrency: MultiCurrency<Self::AccountId, CurrencyId = CurrencyId>;
+
+		// Weight information for extrinsics in this pallet.
+		type WeightInfo: WeightInfo;
 
 		/// Origin represented Governance
 		type UpdateOrigin: EnsureOrigin<<Self as frame_system::Config>::RuntimeOrigin>;
 
-		/// The currency id of the RelayChain
-		#[pallet::constant]
-		type RelaychainCurrencyId: Get<CurrencyIdOf<Self>>;
-
-		/// The account of parachain on the relaychain.
-		#[pallet::constant]
-		type ParachainSovereignAccount: Get<AccountIdOf<Self>>;
-
-		/// XCM executor.
-		type XcmExecutor: ExecuteXcm<<Self as frame_system::Config>::RuntimeCall>;
+		/// Xcm transfer interface
+		type XcmRouter: SendXcm;
 
 		/// Convert `T::AccountId` to `Location`.
-		type AccountIdToLocation: Convert<AccountIdOf<Self>, Location>;
-
-		/// Salp call encode
-		type SalpHelper: SalpHelper<
-			AccountIdOf<Self>,
-			<Self as pallet_xcm::Config>::RuntimeCall,
-			BalanceOf<Self>,
-		>;
+		type AccountIdToLocation: Convert<Self::AccountId, Location>;
 
 		/// Convert Location to `T::CurrencyId`.
-		type CurrencyIdConvert: CurrencyIdMapping<
-			CurrencyIdOf<Self>,
-			xcm::v3::MultiLocation,
-			AssetMetadata<BalanceOf<Self>>,
-		>;
-
-		#[pallet::constant]
-		type RelayNetwork: Get<NetworkId>;
+		type CurrencyIdConvert: CurrencyIdMapping<CurrencyId, AssetMetadata<BalanceOf<Self>>>;
 
 		#[pallet::constant]
 		type ParachainId: Get<ParaId>;
-
-		#[pallet::constant]
-		type CallBackTimeOut: Get<BlockNumberFor<Self>>;
 	}
 
 	#[pallet::error]
 	pub enum Error<T> {
-		FeeConvertFailed,
-		XcmExecutionFailed,
+		/// Failed to send XCM message.
 		XcmSendFailed,
+		/// The weight and fee for the operation does not exist.
 		OperationWeightAndFeeNotExist,
+		/// Failed to convert currency id.
 		FailToConvert,
+		/// The message is unweighable.
 		UnweighableMessage,
-		LocalExecutionIncomplete,
 	}
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(crate) fn deposit_event)]
 	pub enum Event<T: Config> {
-		XcmDestWeightAndFeeUpdated(XcmOperationType, CurrencyIdOf<T>, Weight, BalanceOf<T>),
-		TransferredStatemineMultiAsset(AccountIdOf<T>, BalanceOf<T>),
+		XcmDestWeightAndFeeUpdated(XcmOperationType, CurrencyId, Weight, BalanceOf<T>),
+		TransferredEthereumAssets(T::AccountId, H160, BalanceOf<T>),
 	}
 
 	/// The current storage version, we set to 2 our new version(after migrate stroage
 	/// XcmWeightAndFee from SLP module).
-	#[allow(unused)]
 	const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
 
 	/// The dest weight limit and fee for execution XCM msg sent by XcmInterface. Must be
@@ -147,22 +107,15 @@ pub mod pallet {
 	///
 	/// XcmWeightAndFee: map: XcmOperationType => (Weight, Balance)
 	#[pallet::storage]
-	#[pallet::getter(fn xcm_dest_weight_and_fee)]
 	pub type XcmWeightAndFee<T> = StorageDoubleMap<
 		_,
 		Blake2_128Concat,
-		CurrencyIdOf<T>,
+		CurrencyId,
 		Blake2_128Concat,
 		XcmOperationType,
 		(Weight, BalanceOf<T>),
 		OptionQuery,
 	>;
-
-	// Tracker for the next nonce index
-	#[pallet::storage]
-	#[pallet::getter(fn current_nonce)]
-	pub(super) type CurrentNonce<T: Config> =
-		StorageMap<_, Blake2_128Concat, ChainId, Nonce, ValueQuery>;
 
 	#[pallet::pallet]
 	#[pallet::storage_version(STORAGE_VERSION)]
@@ -179,10 +132,10 @@ pub mod pallet {
 		/// Parameters:
 		/// - `updates`: vec of tuple: (XcmOperationType, WeightChange, FeeChange).
 		#[pallet::call_index(0)]
-		#[pallet::weight({16_690_000})]
+		#[pallet::weight(T::WeightInfo::update_xcm_dest_weight_and_fee())]
 		pub fn update_xcm_dest_weight_and_fee(
 			origin: OriginFor<T>,
-			updates: Vec<(CurrencyIdOf<T>, XcmOperationType, Weight, BalanceOf<T>)>,
+			updates: Vec<(CurrencyId, XcmOperationType, Weight, BalanceOf<T>)>,
 		) -> DispatchResult {
 			T::UpdateOrigin::ensure_origin(origin)?;
 
@@ -203,133 +156,85 @@ pub mod pallet {
 
 			Ok(())
 		}
-		#[pallet::call_index(1)]
+
+		#[pallet::call_index(2)]
 		#[pallet::weight({2_000_000_000})]
-		pub fn transfer_statemine_assets(
+		pub fn transfer_ethereum_assets(
 			origin: OriginFor<T>,
+			currency_id: CurrencyId,
 			amount: BalanceOf<T>,
-			asset_id: u32,
-			dest: Option<AccountIdOf<T>>,
+			to: H160,
 		) -> DispatchResult {
-			let who = ensure_signed(origin)?;
-			let dest = match dest {
-				Some(account) => account,
-				None => who.clone(),
-			};
-
-			let amount_u128 =
-				TryInto::<u128>::try_into(amount).map_err(|_| Error::<T>::FeeConvertFailed)?;
-
-			// get currency_id from asset_id
-			let asset_location = Location::new(
-				1,
-				[
-					Parachain(parachains::Statemine::ID),
-					PalletInstance(parachains::Statemine::PALLET_ID),
-					GeneralIndex(asset_id.into()),
-				],
-			);
-			let currency_id = T::CurrencyIdConvert::get_currency_id(asset_location)
+			let who = ensure_signed(origin.clone())?;
+			let asset_location = T::CurrencyIdConvert::get_location(&currency_id)
 				.ok_or(Error::<T>::FailToConvert)?;
 
-			// first, we need to withdraw the statemine asset from the user's account
+			let asset: Asset = Asset {
+				id: AssetId(asset_location),
+				fun: Fungible(UniqueSaturatedInto::<u128>::unique_saturated_into(amount)),
+			};
+
+			let (require_weight_at_most, xcm_fee) =
+				XcmWeightAndFee::<T>::get(currency_id, XcmOperationType::EthereumTransfer)
+					.ok_or(Error::<T>::OperationWeightAndFeeNotExist)?;
+
+			let fee: Asset = Asset {
+				id: AssetId(Location::parent()),
+				fun: Fungible(UniqueSaturatedInto::<u128>::unique_saturated_into(xcm_fee)),
+			};
+
 			T::MultiCurrency::withdraw(currency_id, &who, amount)?;
 
-			let dst_location = T::AccountIdToLocation::convert(dest.clone());
-
-			let (dest_weight, xcm_fee) = Self::xcm_dest_weight_and_fee(
-				T::RelaychainCurrencyId::get(),
-				XcmOperationType::StatemineTransfer,
-			)
-			.ok_or(Error::<T>::OperationWeightAndFeeNotExist)?;
-
-			let xcm_fee_u128 =
-				TryInto::<u128>::try_into(xcm_fee).map_err(|_| Error::<T>::FeeConvertFailed)?;
-
-			let mut assets = Assets::new();
-			let statemine_asset = Asset {
-				id: AssetId(Location::new(
+			let remote_call: DoubleEncoded<()> =
+				AssetHubCall::PolkadotXcm(PolkadotXcmCall::LimitedReserveTransferAssets(
+					Box::new(EthereumLocation::get().into()),
+					Box::new(
+						Location::new(
+							0,
+							[AccountKey20 { network: None, key: to.to_fixed_bytes() }],
+						)
+						.into(),
+					),
+					Box::new(asset.into()),
 					0,
-					[
-						PalletInstance(parachains::Statemine::PALLET_ID),
-						GeneralIndex(asset_id.into()),
-					],
-				)),
-				fun: Fungible(amount_u128),
-			};
-			let fee_asset =
-				Asset { id: AssetId(Location::new(1, Here)), fun: Fungible(xcm_fee_u128) };
-			assets.push(statemine_asset.clone());
-			assets.push(fee_asset.clone());
-			let msg = Xcm(vec![
-				WithdrawAsset(assets),
-				BuyExecution { fees: fee_asset, weight_limit: Limited(dest_weight) },
-				DepositAsset { assets: AllCounted(2).into(), beneficiary: dst_location },
+					Unlimited,
+				))
+				.encode()
+				.into();
+
+			let remote_xcm = Xcm(vec![
+				WithdrawAsset(fee.clone().into()),
+				BuyExecution { fees: fee.clone(), weight_limit: Unlimited },
+				Transact {
+					origin_kind: OriginKind::SovereignAccount,
+					require_weight_at_most,
+					call: remote_call,
+				},
+				RefundSurplus,
+				DepositAsset {
+					assets: All.into(),
+					beneficiary: Location::new(1, [Parachain(T::ParachainId::get().into())]),
+				},
 			]);
-
-			pallet_xcm::Pallet::<T>::send_xcm(
-				Here,
-				Location::new(1, Parachain(parachains::Statemine::ID)),
-				msg,
-			)
-			.map_err(|_| Error::<T>::XcmExecutionFailed)?;
-
-			Self::deposit_event(Event::<T>::TransferredStatemineMultiAsset(dest, amount));
-
+			let (ticket, _) =
+				T::XcmRouter::validate(&mut Some(AssetHubLocation::get()), &mut Some(remote_xcm))
+					.map_err(|_| Error::<T>::UnweighableMessage)?;
+			T::XcmRouter::deliver(ticket).map_err(|_| Error::<T>::XcmSendFailed)?;
+			Self::deposit_event(Event::<T>::TransferredEthereumAssets(who, to, amount));
 			Ok(())
 		}
 	}
 
-	impl<T: Config> XcmHelper<AccountIdOf<T>, BalanceOf<T>> for Pallet<T> {
-		fn contribute(
-			contributor: AccountIdOf<T>,
-			index: ChainId,
-			amount: BalanceOf<T>,
-		) -> Result<MessageId, DispatchError> {
-			// Construct contribute call data
-			let contribute_call = Self::build_ump_crowdloan_contribute(index, amount);
-			let (dest_weight, xcm_fee) = Self::xcm_dest_weight_and_fee(
-				T::RelaychainCurrencyId::get(),
-				XcmOperationType::UmpContributeTransact,
-			)
-			.ok_or(Error::<T>::OperationWeightAndFeeNotExist)?;
-
-			// Construct confirm_contribute_call
-			let confirm_contribute_call = T::SalpHelper::confirm_contribute_call();
-			// Generate query_id
-			let query_id = pallet_xcm::Pallet::<T>::new_notify_query(
-				Location::parent(),
-				confirm_contribute_call,
-				T::CallBackTimeOut::get(),
-				xcm::v4::Junctions::Here,
-			);
-
-			// Bind query_id and contribution
-			T::SalpHelper::bind_query_id_and_contribution(query_id, index, contributor, amount);
-
-			let (msg_id, msg) =
-				Self::build_ump_transact(query_id, contribute_call, dest_weight, xcm_fee)?;
-
-			let result = pallet_xcm::Pallet::<T>::send_xcm(
-				xcm::v4::Junctions::Here,
-				xcm::v4::Parent,
-				xcm::v4::Xcm::try_from(msg).unwrap(),
-			);
-			ensure!(result.is_ok(), Error::<T>::XcmSendFailed);
-			Ok(msg_id)
-		}
-	}
-
-	impl<T: Config> XcmDestWeightAndFeeHandler<CurrencyIdOf<T>, BalanceOf<T>> for Pallet<T> {
+	impl<T: Config> XcmDestWeightAndFeeHandler<CurrencyId, BalanceOf<T>> for Pallet<T> {
 		fn get_operation_weight_and_fee(
-			token: CurrencyIdOf<T>,
+			token: CurrencyId,
 			operation: XcmOperationType,
 		) -> Option<(Weight, BalanceOf<T>)> {
-			Self::xcm_dest_weight_and_fee(token, operation)
+			XcmWeightAndFee::<T>::get(token, operation)
 		}
 
 		fn set_xcm_dest_weight_and_fee(
-			currency_id: CurrencyIdOf<T>,
+			currency_id: CurrencyId,
 			operation: XcmOperationType,
 			weight_and_fee: Option<(Weight, BalanceOf<T>)>,
 		) -> DispatchResult {
@@ -340,60 +245,6 @@ pub mod pallet {
 			});
 
 			Ok(())
-		}
-	}
-
-	impl<T: Config> Pallet<T> {
-		pub(crate) fn transact_id(data: &[u8]) -> MessageId {
-			return sp_io::hashing::blake2_256(data);
-		}
-
-		pub(crate) fn build_ump_transact(
-			query_id: QueryId,
-			call: DoubleEncoded<()>,
-			weight: Weight,
-			fee: BalanceOf<T>,
-		) -> Result<(MessageId, Xcm<()>), Error<T>> {
-			let sovereign_account: AccountIdOf<T> = T::ParachainSovereignAccount::get();
-			let sovereign_location: Location = T::AccountIdToLocation::convert(sovereign_account);
-			let fee_amount =
-				TryInto::<u128>::try_into(fee).map_err(|_| Error::<T>::FeeConvertFailed)?;
-			let asset: Asset =
-				Asset { id: AssetId(Location::here()), fun: Fungibility::from(fee_amount) };
-			let message = Xcm(vec![
-				WithdrawAsset(asset.clone().into()),
-				BuyExecution { fees: asset, weight_limit: Unlimited },
-				Transact {
-					origin_kind: OriginKind::SovereignAccount,
-					require_weight_at_most: weight,
-					call,
-				},
-				ReportTransactStatus(QueryResponseInfo {
-					destination: Location::from([Parachain(u32::from(T::ParachainId::get()))]),
-					query_id,
-					max_weight: weight,
-				}),
-				RefundSurplus,
-				DepositAsset { assets: AllCounted(1).into(), beneficiary: sovereign_location },
-			]);
-			let data = VersionedXcm::<()>::from(message.clone()).encode();
-			let id = Self::transact_id(&data[..]);
-			Ok((id, message))
-		}
-
-		pub(crate) fn build_ump_crowdloan_contribute(
-			index: ChainId,
-			value: BalanceOf<T>,
-		) -> DoubleEncoded<()> {
-			use_relay!({
-				let contribute_call =
-					RelaychainCall::Crowdloan::<BalanceOf<T>, AccountIdOf<T>, BlockNumberFor<T>>(
-						ContributeCall::Contribute(Contribution { index, value, signature: None }),
-					)
-					.encode()
-					.into();
-				contribute_call
-			})
 		}
 	}
 }

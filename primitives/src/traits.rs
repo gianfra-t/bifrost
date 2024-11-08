@@ -21,18 +21,20 @@
 #![allow(clippy::unnecessary_cast)]
 
 use crate::{
-	AssetIds, DerivativeIndex, ExtraFeeInfo, LeasePeriod, ParaId, PoolId, RedeemType, TokenId,
+	AssetIds, CurrencyId, DerivativeIndex, LeasePeriod, ParaId, PoolId, RedeemType, TokenId,
 	TokenSymbol, XcmOperationType,
 };
 use frame_support::pallet_prelude::{DispatchResultWithPostInfo, Weight};
 use parity_scale_codec::{Decode, Encode, FullCodec};
+use sp_core::U256;
 use sp_runtime::{
 	traits::{
 		AccountIdConversion, AtLeast32BitUnsigned, ConstU32, MaybeSerializeDeserialize, Zero,
 	},
-	BoundedVec, DispatchError, DispatchResult, TokenError, TypeId,
+	BoundedVec, DispatchError, DispatchResult, TypeId,
 };
-use sp_std::{fmt::Debug, vec::Vec};
+use sp_std::{cmp::Ordering, fmt::Debug, vec::Vec};
+use xcm::prelude::Location;
 
 pub trait TokenInfo {
 	fn name(&self) -> Option<&str>;
@@ -80,16 +82,6 @@ pub trait MultiCurrencyExt<AccountId> {
 	) -> DispatchResult;
 }
 
-pub trait BancorHandler<Balance> {
-	fn add_token(currency_id: super::CurrencyId, amount: Balance) -> DispatchResult;
-}
-
-impl<Balance> BancorHandler<Balance> for () {
-	fn add_token(_currency_id: super::CurrencyId, _amount: Balance) -> DispatchResult {
-		DispatchResult::from(DispatchError::Token(TokenError::FundsUnavailable))
-	}
-}
-
 pub trait CheckSubAccount<T: Encode + Decode> {
 	fn check_sub_account<S: Decode>(&self, account: &T) -> bool;
 }
@@ -130,13 +122,6 @@ pub trait VtokenMintingOperator<CurrencyId, Balance, AccountId, TimeUnit> {
 		time_unit: TimeUnit,
 	) -> Option<(Balance, Vec<u32>)>;
 
-	/// Revise the currency indexed unlocking record by some amount.
-	fn deduct_unlock_amount(
-		currency_id: CurrencyId,
-		index: u32,
-		deduct_amount: Balance,
-	) -> DispatchResult;
-
 	/// Get currency Entrance and Exit accounts.【entrance_account, exit_account】
 	fn get_entrance_and_exit_accounts() -> (AccountId, AccountId);
 
@@ -145,11 +130,7 @@ pub trait VtokenMintingOperator<CurrencyId, Balance, AccountId, TimeUnit> {
 		currency_id: CurrencyId,
 		index: u32,
 	) -> Option<(AccountId, Balance, TimeUnit, RedeemType<AccountId>)>;
-	fn get_astar_parachain_id() -> u32;
 	fn get_moonbeam_parachain_id() -> u32;
-	fn get_hydradx_parachain_id() -> u32;
-	fn get_interlay_parachain_id() -> u32;
-	fn get_manta_parachain_id() -> u32;
 }
 
 /// Trait for Vtoken-Minting module to check whether accept redeeming or not.
@@ -163,15 +144,15 @@ pub trait SlpxOperator<Balance> {
 }
 
 /// A mapping between CurrencyId and AssetMetadata.
-pub trait CurrencyIdMapping<CurrencyId, MultiLocation, AssetMetadata> {
+pub trait CurrencyIdMapping<CurrencyId, AssetMetadata> {
 	/// Returns the AssetMetadata associated with a given `AssetIds`.
 	fn get_asset_metadata(asset_ids: AssetIds) -> Option<AssetMetadata>;
 	/// Returns the AssetMetadata associated with a given `CurrencyId`.
 	fn get_currency_metadata(currency_id: CurrencyId) -> Option<AssetMetadata>;
 	/// Returns the Location associated with a given CurrencyId.
-	fn get_location(currency_id: CurrencyId) -> Option<xcm::v4::Location>;
+	fn get_location(currency_id: &CurrencyId) -> Option<Location>;
 	/// Returns the CurrencyId associated with a given Location.
-	fn get_currency_id(multi_location: xcm::v4::Location) -> Option<CurrencyId>;
+	fn get_currency_id(location: &Location) -> Option<CurrencyId>;
 	/// Returns all currencies in currencyMetadata.
 	fn get_all_currency() -> Vec<CurrencyId>;
 }
@@ -199,30 +180,9 @@ pub trait CurrencyIdRegister<CurrencyId> {
 		last_slot: crate::LeasePeriod,
 	) -> bool;
 	fn register_vtoken_metadata(token_symbol: TokenSymbol) -> DispatchResult;
-	fn register_vstoken_metadata(token_symbol: TokenSymbol) -> DispatchResult;
-	fn register_vsbond_metadata(
-		token_symbol: TokenSymbol,
-		para_id: crate::ParaId,
-		first_slot: crate::LeasePeriod,
-		last_slot: crate::LeasePeriod,
-	) -> DispatchResult;
 	fn check_token2_registered(token_id: TokenId) -> bool;
 	fn check_vtoken2_registered(token_id: TokenId) -> bool;
-	fn check_vstoken2_registered(token_id: TokenId) -> bool;
-	fn check_vsbond2_registered(
-		token_id: TokenId,
-		para_id: crate::ParaId,
-		first_slot: crate::LeasePeriod,
-		last_slot: crate::LeasePeriod,
-	) -> bool;
 	fn register_vtoken2_metadata(token_id: TokenId) -> DispatchResult;
-	fn register_vstoken2_metadata(token_id: TokenId) -> DispatchResult;
-	fn register_vsbond2_metadata(
-		token_id: TokenId,
-		para_id: crate::ParaId,
-		first_slot: crate::LeasePeriod,
-		last_slot: crate::LeasePeriod,
-	) -> DispatchResult;
 	fn register_blp_metadata(pool_id: PoolId, decimals: u8) -> DispatchResult;
 }
 
@@ -252,19 +212,6 @@ impl<CurrencyId> CurrencyIdRegister<CurrencyId> for () {
 		Ok(())
 	}
 
-	fn register_vstoken_metadata(_token_symbol: TokenSymbol) -> DispatchResult {
-		Ok(())
-	}
-
-	fn register_vsbond_metadata(
-		_token_symbol: TokenSymbol,
-		_para_id: ParaId,
-		_first_slot: LeasePeriod,
-		_last_slot: LeasePeriod,
-	) -> DispatchResult {
-		Ok(())
-	}
-
 	fn check_token2_registered(_token_id: TokenId) -> bool {
 		false
 	}
@@ -273,33 +220,7 @@ impl<CurrencyId> CurrencyIdRegister<CurrencyId> for () {
 		false
 	}
 
-	fn check_vstoken2_registered(_token_id: TokenId) -> bool {
-		false
-	}
-
-	fn check_vsbond2_registered(
-		_token_id: TokenId,
-		_para_id: ParaId,
-		_first_slot: LeasePeriod,
-		_last_slot: LeasePeriod,
-	) -> bool {
-		false
-	}
-
 	fn register_vtoken2_metadata(_token_id: TokenId) -> DispatchResult {
-		Ok(())
-	}
-
-	fn register_vstoken2_metadata(_token_id: TokenId) -> DispatchResult {
-		Ok(())
-	}
-
-	fn register_vsbond2_metadata(
-		_token_id: TokenId,
-		_para_id: ParaId,
-		_first_slot: LeasePeriod,
-		_last_slot: LeasePeriod,
-	) -> DispatchResult {
 		Ok(())
 	}
 
@@ -333,25 +254,19 @@ pub trait VtokenMintingInterface<AccountId, CurrencyId, Balance> {
 		vtoken_amount: Balance,
 		redeem: RedeemType<AccountId>,
 	) -> DispatchResultWithPostInfo;
-	fn token_to_vtoken(
+	fn get_v_currency_amount_by_currency_amount(
 		token_id: CurrencyId,
 		vtoken_id: CurrencyId,
 		token_amount: Balance,
 	) -> Result<Balance, DispatchError>;
-	fn vtoken_to_token(
+	fn get_currency_amount_by_v_currency_amount(
 		token_id: CurrencyId,
 		vtoken_id: CurrencyId,
 		vtoken_amount: Balance,
 	) -> Result<Balance, DispatchError>;
-	fn vtoken_id(token_id: CurrencyId) -> Option<CurrencyId>;
-	fn token_id(vtoken_id: CurrencyId) -> Option<CurrencyId>;
 	fn get_token_pool(currency_id: CurrencyId) -> Balance;
 	fn get_minimums_redeem(vtoken_id: CurrencyId) -> Balance;
-	fn get_astar_parachain_id() -> u32;
 	fn get_moonbeam_parachain_id() -> u32;
-	fn get_hydradx_parachain_id() -> u32;
-	fn get_interlay_parachain_id() -> u32;
-	fn get_manta_parachain_id() -> u32;
 }
 
 impl<AccountId, CurrencyId, Balance: Zero> VtokenMintingInterface<AccountId, CurrencyId, Balance>
@@ -384,7 +299,7 @@ impl<AccountId, CurrencyId, Balance: Zero> VtokenMintingInterface<AccountId, Cur
 		Ok(().into())
 	}
 
-	fn token_to_vtoken(
+	fn get_v_currency_amount_by_currency_amount(
 		_token_id: CurrencyId,
 		_vtoken_id: CurrencyId,
 		_token_amount: Balance,
@@ -392,20 +307,12 @@ impl<AccountId, CurrencyId, Balance: Zero> VtokenMintingInterface<AccountId, Cur
 		Ok(Zero::zero())
 	}
 
-	fn vtoken_to_token(
+	fn get_currency_amount_by_v_currency_amount(
 		_token_id: CurrencyId,
 		_vtoken_id: CurrencyId,
 		_vtoken_amount: Balance,
 	) -> Result<Balance, DispatchError> {
 		Ok(Zero::zero())
-	}
-
-	fn vtoken_id(_token_id: CurrencyId) -> Option<CurrencyId> {
-		None
-	}
-
-	fn token_id(_vtoken_id: CurrencyId) -> Option<CurrencyId> {
-		None
 	}
 
 	fn get_token_pool(_currency_id: CurrencyId) -> Balance {
@@ -416,19 +323,7 @@ impl<AccountId, CurrencyId, Balance: Zero> VtokenMintingInterface<AccountId, Cur
 		Zero::zero()
 	}
 
-	fn get_astar_parachain_id() -> u32 {
-		0
-	}
 	fn get_moonbeam_parachain_id() -> u32 {
-		0
-	}
-	fn get_hydradx_parachain_id() -> u32 {
-		0
-	}
-	fn get_interlay_parachain_id() -> u32 {
-		0
-	}
-	fn get_manta_parachain_id() -> u32 {
 		0
 	}
 }
@@ -476,17 +371,15 @@ where
 	}
 }
 
-pub trait FeeGetter<RuntimeCall> {
-	fn get_fee_info(call: &RuntimeCall) -> ExtraFeeInfo;
-}
-
-pub trait DerivativeAccountHandler<CurrencyId, Balance> {
+pub trait DerivativeAccountHandler<CurrencyId, Balance, AccountId> {
 	fn check_derivative_index_exists(token: CurrencyId, derivative_index: DerivativeIndex) -> bool;
 
 	fn get_multilocation(
 		token: CurrencyId,
 		derivative_index: DerivativeIndex,
 	) -> Option<xcm::v3::MultiLocation>;
+
+	fn get_account_id(token: CurrencyId, derivative_index: DerivativeIndex) -> Option<AccountId>;
 
 	fn get_stake_info(
 		token: CurrencyId,
@@ -550,4 +443,58 @@ impl<CurrencyId, Balance, AccountId> SlpHostingFeeProvider<CurrencyId, Balance, 
 	) -> Result<(), DispatchError> {
 		Ok(())
 	}
+}
+
+/// Provides account's fee payment currency id
+pub trait AccountFeeCurrency<AccountId> {
+	type Error;
+	/// Retrieves the currency used to pay the transaction fee.
+	///
+	/// This method returns the `CurrencyId` of the currency that will be used to pay the
+	/// transaction fee for the current transaction. It is useful for determining which currency
+	/// will be deducted to cover the cost of the transaction.
+	fn get_fee_currency(account: &AccountId, fee: U256) -> Result<CurrencyId, Self::Error>;
+}
+
+/// Provides account's balance of fee asset currency in a given currency
+pub trait AccountFeeCurrencyBalanceInCurrency<AccountId> {
+	type Output;
+	type Error;
+
+	// This `fee` variable is used to determine the currency for paying transaction fees.
+	fn get_balance_in_currency(
+		to_currency: CurrencyId,
+		account: &AccountId,
+		fee: U256,
+	) -> Result<Self::Output, Self::Error>;
+}
+
+pub trait PriceProvider {
+	type Price;
+
+	fn get_price(asset_a: CurrencyId, asset_b: CurrencyId) -> Option<Self::Price>;
+}
+
+/// A trait for comparing the balance of a specific currency for a given account.
+pub trait BalanceCmp<AccountId> {
+	type Error;
+	/// Compares the balance of the specified currency for the given account with
+	/// an input amount, considering the precision of both the currency and the amount.
+	///
+	/// # Parameters
+	/// - `account`: The account ID whose balance is to be compared.
+	/// - `currency`: The currency ID whose balance is to be compared.
+	/// - `amount`: The amount to compare against.
+	/// - `amount_precision`: The precision of the input amount.
+	///
+	/// # Returns
+	/// - `Ok(std::cmp::Ordering)`: The result of the comparison, indicating whether the balance is
+	///   less than, equal to, or greater than the input amount.
+	/// - `Err(Self::Error)`: An error if the comparison fails.
+	fn cmp_with_precision(
+		account: &AccountId,
+		currency: &CurrencyId,
+		amount: u128,
+		amount_precision: u32,
+	) -> Result<Ordering, Self::Error>;
 }

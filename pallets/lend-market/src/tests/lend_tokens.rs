@@ -1,7 +1,7 @@
 use crate::{
 	mock::{
-		market_mock, new_test_ext, LendMarket, RuntimeOrigin, Test, ALICE, BNC, DAVE, DOT_U, KSM,
-		LKSM, LUSDT, VBNC,
+		market_mock, new_test_ext, LendMarket, RuntimeOrigin, Test, ALICE, BNC, DAVE, DOT, DOT_U,
+		KSM, LKSM, LUSDT, PHA, VBNC,
 	},
 	tests::unit,
 	Error, *,
@@ -15,7 +15,21 @@ use sp_runtime::{FixedPointNumber, TokenError};
 #[test]
 fn trait_inspect_methods_works() {
 	new_test_ext().execute_with(|| {
-		// No Deposits can't not withdraw
+		assert_ok!(LendMarket::add_market_bond(
+			RuntimeOrigin::root(),
+			KSM,
+			vec![DOT, BNC, KSM, DOT_U, PHA]
+		));
+		assert_ok!(LendMarket::add_market_bond(
+			RuntimeOrigin::root(),
+			DOT,
+			vec![DOT, BNC, KSM, DOT_U, PHA]
+		));
+		assert_ok!(LendMarket::add_market_bond(
+			RuntimeOrigin::root(),
+			BNC,
+			vec![DOT, BNC, KSM, DOT_U, PHA]
+		)); // No Deposits can't not withdraw
 		assert_err!(
 			LendMarket::can_withdraw(VBNC, &DAVE, 100).into_result(false),
 			TokenError::FundsUnavailable
@@ -41,8 +55,8 @@ fn trait_inspect_methods_works() {
 		assert_ok!(LendMarket::borrow(RuntimeOrigin::signed(DAVE), BNC, unit(25)));
 
 		assert_eq!(
-			LendMarket::exchange_rate(BNC)
-				.saturating_mul_int(LendMarket::account_deposits(BNC, DAVE).voucher_balance),
+			ExchangeRate::<Test>::get(BNC)
+				.saturating_mul_int(AccountDeposits::<Test>::get(BNC, DAVE).voucher_balance),
 			unit(100)
 		);
 
@@ -91,7 +105,21 @@ fn trait_inspect_methods_works() {
 #[test]
 fn lend_token_unique_works() {
 	new_test_ext().execute_with(|| {
-		// lend_token_id already exists in `UnderlyingAssetId`
+		assert_ok!(LendMarket::add_market_bond(
+			RuntimeOrigin::root(),
+			KSM,
+			vec![DOT, BNC, KSM, DOT_U, PHA]
+		));
+		assert_ok!(LendMarket::add_market_bond(
+			RuntimeOrigin::root(),
+			DOT,
+			vec![DOT, BNC, KSM, DOT_U, PHA]
+		));
+		assert_ok!(LendMarket::add_market_bond(
+			RuntimeOrigin::root(),
+			BNC,
+			vec![DOT, BNC, KSM, DOT_U, PHA]
+		)); // lend_token_id already exists in `UnderlyingAssetId`
 		assert_noop!(
 			LendMarket::add_market(RuntimeOrigin::root(), LKSM, market_mock(VBNC)),
 			Error::<Test>::InvalidLendTokenId
@@ -108,21 +136,35 @@ fn lend_token_unique_works() {
 #[test]
 fn transfer_lend_token_works() {
 	new_test_ext().execute_with(|| {
-		// DAVE Deposit 100 BNC
+		assert_ok!(LendMarket::add_market_bond(
+			RuntimeOrigin::root(),
+			KSM,
+			vec![DOT, BNC, KSM, DOT_U, PHA]
+		));
+		assert_ok!(LendMarket::add_market_bond(
+			RuntimeOrigin::root(),
+			DOT,
+			vec![DOT, BNC, KSM, DOT_U, PHA]
+		));
+		assert_ok!(LendMarket::add_market_bond(
+			RuntimeOrigin::root(),
+			BNC,
+			vec![DOT, BNC, KSM, DOT_U, PHA]
+		)); // DAVE Deposit 100 BNC
 		assert_ok!(LendMarket::mint(RuntimeOrigin::signed(DAVE), BNC, unit(100)));
 
 		// DAVE BNC collateral: deposit = 100
 		// BNC: cash - deposit = 1000 - 100 = 900
 		assert_eq!(
-			LendMarket::exchange_rate(BNC)
-				.saturating_mul_int(LendMarket::account_deposits(BNC, DAVE).voucher_balance),
+			ExchangeRate::<Test>::get(BNC)
+				.saturating_mul_int(AccountDeposits::<Test>::get(BNC, DAVE).voucher_balance),
 			unit(100)
 		);
 
 		// ALICE BNC collateral: deposit = 0
 		assert_eq!(
-			LendMarket::exchange_rate(BNC)
-				.saturating_mul_int(LendMarket::account_deposits(BNC, ALICE).voucher_balance),
+			ExchangeRate::<Test>::get(BNC)
+				.saturating_mul_int(AccountDeposits::<Test>::get(BNC, ALICE).voucher_balance),
 			unit(0)
 		);
 
@@ -131,8 +173,8 @@ fn transfer_lend_token_works() {
 
 		// DAVE BNC collateral: deposit = 50
 		assert_eq!(
-			LendMarket::exchange_rate(BNC)
-				.saturating_mul_int(LendMarket::account_deposits(BNC, DAVE).voucher_balance),
+			ExchangeRate::<Test>::get(BNC)
+				.saturating_mul_int(AccountDeposits::<Test>::get(BNC, DAVE).voucher_balance),
 			unit(50)
 		);
 		// DAVE Redeem 51 BNC should cause InsufficientDeposit
@@ -143,8 +185,8 @@ fn transfer_lend_token_works() {
 
 		// ALICE BNC collateral: deposit = 50
 		assert_eq!(
-			LendMarket::exchange_rate(BNC)
-				.saturating_mul_int(LendMarket::account_deposits(BNC, ALICE).voucher_balance),
+			ExchangeRate::<Test>::get(BNC)
+				.saturating_mul_int(AccountDeposits::<Test>::get(BNC, ALICE).voucher_balance),
 			unit(50)
 		);
 		// ALICE Redeem 50 BNC should be succeeded
@@ -155,7 +197,21 @@ fn transfer_lend_token_works() {
 #[test]
 fn transfer_lend_tokens_under_collateral_works() {
 	new_test_ext().execute_with(|| {
-		// DAVE Deposit 100 BNC
+		assert_ok!(LendMarket::add_market_bond(
+			RuntimeOrigin::root(),
+			KSM,
+			vec![DOT, BNC, KSM, DOT_U, PHA]
+		));
+		assert_ok!(LendMarket::add_market_bond(
+			RuntimeOrigin::root(),
+			DOT,
+			vec![DOT, BNC, KSM, DOT_U, PHA]
+		));
+		assert_ok!(LendMarket::add_market_bond(
+			RuntimeOrigin::root(),
+			BNC,
+			vec![DOT, BNC, KSM, DOT_U, PHA]
+		)); // DAVE Deposit 100 BNC
 		assert_ok!(LendMarket::mint(RuntimeOrigin::signed(DAVE), BNC, unit(100)));
 		assert_ok!(LendMarket::collateral_asset(RuntimeOrigin::signed(DAVE), BNC, true));
 
@@ -171,8 +227,8 @@ fn transfer_lend_tokens_under_collateral_works() {
 		// DAVE Borrow BNC = 0 + 50 - 40 = 10
 		// DAVE liquidity BNC = 80 * 0.5 - 10 = 30
 		assert_eq!(
-			LendMarket::exchange_rate(BNC)
-				.saturating_mul_int(LendMarket::account_deposits(BNC, DAVE).voucher_balance),
+			ExchangeRate::<Test>::get(BNC)
+				.saturating_mul_int(AccountDeposits::<Test>::get(BNC, DAVE).voucher_balance),
 			unit(80)
 		);
 		// DAVE Borrow 31 BNC should cause InsufficientLiquidity
@@ -184,8 +240,8 @@ fn transfer_lend_tokens_under_collateral_works() {
 
 		// Assert ALICE Supply BNC 20
 		assert_eq!(
-			LendMarket::exchange_rate(BNC)
-				.saturating_mul_int(LendMarket::account_deposits(BNC, ALICE).voucher_balance),
+			ExchangeRate::<Test>::get(BNC)
+				.saturating_mul_int(AccountDeposits::<Test>::get(BNC, ALICE).voucher_balance),
 			unit(20)
 		);
 		// ALICE Redeem 20 BNC should be succeeded

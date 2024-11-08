@@ -17,22 +17,24 @@
 //! ## Overview
 //!
 //! This pallet provides the price from Oracle Module by implementing the
-//! `PriceFeeder` trait. In case of emergency, the price can be set directly
+//! `OraclePriceProvider` trait. In case of emergency, the price can be set directly
 //! by Oracle Collective.
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use bifrost_asset_registry::AssetMetadata;
-use bifrost_primitives::*;
+use bifrost_primitives::{
+	Balance, CurrencyId, CurrencyIdMapping, OraclePriceProvider, Price, PriceDetail,
+	TimeStampedPrice, TokenInfo,
+};
 use frame_support::{dispatch::DispatchClass, pallet_prelude::*, transactional};
 use frame_system::pallet_prelude::*;
 use log;
-use orml_traits::{DataFeeder, DataProvider, DataProviderExtended};
+use orml_oracle::{DataFeeder, DataProvider, DataProviderExtended};
 pub use pallet::*;
 use pallet_traits::*;
 use sp_runtime::{traits::CheckedDiv, FixedU128};
 use sp_std::vec::Vec;
-use xcm::v3::MultiLocation;
 
 #[cfg(test)]
 mod mock;
@@ -76,11 +78,7 @@ pub mod pallet {
 		type RelayCurrency: Get<CurrencyId>;
 
 		/// Convert Location to `T::CurrencyId`.
-		type CurrencyIdConvert: CurrencyIdMapping<
-			CurrencyId,
-			MultiLocation,
-			AssetMetadata<BalanceOf<Self>>,
-		>;
+		type CurrencyIdConvert: CurrencyIdMapping<CurrencyId, AssetMetadata<BalanceOf<Self>>>;
 
 		/// Weight information
 		type WeightInfo: WeightInfo;
@@ -97,15 +95,33 @@ pub mod pallet {
 
 	/// Mapping from currency id to it's emergency price
 	#[pallet::storage]
-	#[pallet::getter(fn emergency_price)]
 	pub type EmergencyPrice<T: Config> =
 		StorageMap<_, Twox64Concat, CurrencyId, Price, OptionQuery>;
 
 	/// Mapping from foreign vault token to our's vault token
 	#[pallet::storage]
-	#[pallet::getter(fn foreign_to_native_asset)]
 	pub type ForeignToNativeAsset<T: Config> =
 		StorageMap<_, Twox64Concat, CurrencyId, CurrencyId, OptionQuery>;
+
+	#[pallet::genesis_config]
+	#[derive(frame_support::DefaultNoBound)]
+	pub struct GenesisConfig<T: Config> {
+		pub emergency_price: Vec<(CurrencyId, Price)>,
+		pub foreign_to_native_asset: Vec<(CurrencyId, CurrencyId)>,
+		pub phantom: PhantomData<T>,
+	}
+
+	#[pallet::genesis_build]
+	impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
+		fn build(&self) {
+			for (asset_id, price) in self.emergency_price.iter() {
+				EmergencyPrice::<T>::insert(asset_id, price);
+			}
+			for (foreign_asset_id, native) in self.foreign_to_native_asset.iter() {
+				ForeignToNativeAsset::<T>::insert(foreign_asset_id, native);
+			}
+		}
+	}
 
 	#[pallet::pallet]
 	#[pallet::without_storage_info]
@@ -123,7 +139,7 @@ pub mod pallet {
 			price: Price,
 		) -> DispatchResultWithPostInfo {
 			T::FeederOrigin::ensure_origin(origin)?;
-			<Pallet<T> as EmergencyPriceFeeder<CurrencyId, Price>>::set_emergency_price(
+			<Pallet<T> as EmergencyOraclePriceProvider<CurrencyId, Price>>::set_emergency_price(
 				asset_id, price,
 			);
 			Ok(().into())
@@ -138,7 +154,9 @@ pub mod pallet {
 			asset_id: CurrencyId,
 		) -> DispatchResultWithPostInfo {
 			T::FeederOrigin::ensure_origin(origin)?;
-			<Pallet<T> as EmergencyPriceFeeder<CurrencyId, Price>>::reset_emergency_price(asset_id);
+			<Pallet<T> as EmergencyOraclePriceProvider<CurrencyId, Price>>::reset_emergency_price(
+				asset_id,
+			);
 			Ok(().into())
 		}
 
@@ -161,7 +179,7 @@ pub mod pallet {
 impl<T: Config> Pallet<T> {
 	// get emergency price, the timestamp is zero
 	fn get_emergency_price(asset_id: &CurrencyId) -> Option<PriceDetail> {
-		Self::emergency_price(asset_id).and_then(|p| {
+		EmergencyPrice::<T>::get(asset_id).and_then(|p| {
 			let mantissa = Self::get_asset_mantissa(asset_id)?;
 			log::trace!(
 				target: "prices::get_emergency_price",
@@ -171,6 +189,11 @@ impl<T: Config> Pallet<T> {
 			);
 			p.checked_div(&FixedU128::from_inner(mantissa)).map(|price| (price, 0))
 		})
+	}
+
+	fn get_storage_price(asset_id: &CurrencyId) -> Option<Price> {
+		EmergencyPrice::<T>::get(asset_id)
+			.or_else(|| T::Source::get(asset_id).and_then(|price| Some(price.value)))
 	}
 
 	fn get_asset_mantissa(asset_id: &CurrencyId) -> Option<u128> {
@@ -200,7 +223,7 @@ impl<T: Config> Pallet<T> {
 	}
 }
 
-impl<T: Config> PriceFeeder for Pallet<T> {
+impl<T: Config> OraclePriceProvider for Pallet<T> {
 	/// Returns the uniform format price and timestamp by asset id.
 	/// Formula: `price = oracle_price * 10.pow(18 - asset_decimal)`
 	/// We use `oracle_price.checked_div(&FixedU128::from_inner(mantissa))` represent that.
@@ -218,9 +241,59 @@ impl<T: Config> PriceFeeder for Pallet<T> {
 				.and_then(|price| Self::normalize_detail_price(price, mantissa))
 		})
 	}
+
+	/// Get the amount of currencies according to the input price data.
+	/// Parameters:
+	/// - `currency_in`: The currency to be converted.
+	/// - `amount_in`: The amount of currency to be converted.
+	/// - `price_in`: The price of currency_in.
+	/// - `currency_out`: The currency to be converted to.
+	/// - `price_out`: The price of currency_out.
+	/// Returns:
+	/// - The amount of currency_out.
+	fn get_amount_by_prices(
+		currency_in: &CurrencyId,
+		amount_in: Balance,
+		price_in: Price,
+		currency_out: &CurrencyId,
+		price_out: Price,
+	) -> Option<Balance> {
+		let currency_in_mantissa = Self::get_asset_mantissa(currency_in)?;
+		let currency_out_mantissa = Self::get_asset_mantissa(currency_out)?;
+		let total_value = price_in
+			.mul(FixedU128::from_inner(amount_in))
+			.div(FixedU128::from_inner(currency_in_mantissa));
+		let amount_out =
+			total_value.mul(FixedU128::from_inner(currency_out_mantissa)).div(price_out);
+		Some(amount_out.into_inner())
+	}
+
+	/// Get the amount of currencies according to the oracle price data.
+	/// Parameters:
+	/// - `currency_in`: The currency to be converted.
+	/// - `amount_in`: The amount of currency to be converted.
+	/// - `currency_out`: The currency to be converted to.
+	/// Returns:
+	/// - The amount of currency_out.
+	/// - The price of currency_in.
+	/// - The price of currency_out.
+	fn get_oracle_amount_by_currency_and_amount_in(
+		currency_in: &CurrencyId,
+		amount_in: Balance,
+		currency_out: &CurrencyId,
+	) -> Option<(Balance, Price, Price)> {
+		let price_in = Self::get_storage_price(currency_in)?;
+		if currency_in == currency_out {
+			Some((amount_in, price_in, price_in))
+		} else {
+			let price_out = Self::get_storage_price(currency_out)?;
+			Self::get_amount_by_prices(currency_in, amount_in, price_in, currency_out, price_out)
+				.map(|amount_out| (amount_out, price_in, price_out))
+		}
+	}
 }
 
-impl<T: Config> EmergencyPriceFeeder<CurrencyId, Price> for Pallet<T> {
+impl<T: Config> EmergencyOraclePriceProvider<CurrencyId, Price> for Pallet<T> {
 	/// Set emergency price
 	fn set_emergency_price(asset_id: CurrencyId, price: Price) {
 		// set price direct

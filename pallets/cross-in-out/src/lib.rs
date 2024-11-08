@@ -19,20 +19,17 @@
 // Ensure we're `no_std` when compiling for Wasm.
 #![cfg_attr(not(feature = "std"), no_std)]
 
-// pub use crate::imbalances::{NegativeImbalance, PositiveImbalance};
 extern crate alloc;
 
-use alloc::{vec, vec::Vec};
+use alloc::vec;
 use bifrost_primitives::CurrencyId;
-use frame_support::{ensure, pallet_prelude::*, sp_runtime::traits::AccountIdConversion, PalletId};
+use frame_support::{ensure, pallet_prelude::*, PalletId};
 use frame_system::pallet_prelude::*;
 use orml_traits::MultiCurrency;
 use sp_std::boxed::Box;
 pub use weights::WeightInfo;
-use xcm::{
-	opaque::v2::{Junction::AccountId32, Junctions::X1, NetworkId::Any},
-	v2::MultiLocation,
-};
+#[allow(deprecated)]
+use xcm::v2::MultiLocation;
 
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
@@ -48,6 +45,7 @@ type BalanceOf<T> = <<T as Config>::MultiCurrency as MultiCurrency<
 >>::Balance;
 type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
 
+#[allow(deprecated)]
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
@@ -73,62 +71,49 @@ pub mod pallet {
 
 	#[pallet::error]
 	pub enum Error<T> {
+		/// Indicates that the balance is not sufficient for the requested operation.
 		NotEnoughBalance,
+		/// Indicates that the specified item does not exist.
 		NotExist,
+		/// Indicates that the operation is not allowed for the current context.
 		NotAllowed,
+		/// Indicates that the currency does not support crossing in and out.
 		CurrencyNotSupportCrossInAndOut,
+		/// Indicates that there is no mapping for the specified multilocation.
 		NoMultilocationMapping,
-		NoAccountIdMapping,
+		/// Indicates that the item already exists.
 		AlreadyExist,
+		/// Indicates that there is no minimum crossing amount set for the operation.
 		NoCrossingMinimumSet,
+		/// Indicates that the specified amount is lower than the required minimum.
 		AmountLowerThanMinimum,
-		ExceedMaxLengthLimit,
-		FailedToConvert,
+		/// Indicates that the list has reached its maximum capacity.
+		ListOverflow,
 	}
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(crate) fn deposit_event)]
 	pub enum Event<T: Config> {
+		/// Event emitted when a currency is successfully crossed out from a location.
 		CrossedOut {
 			currency_id: CurrencyId,
 			crosser: AccountIdOf<T>,
 			location: MultiLocation,
 			amount: BalanceOf<T>,
 		},
-		CrossedIn {
-			currency_id: CurrencyId,
-			dest: AccountIdOf<T>,
-			location: MultiLocation,
-			amount: BalanceOf<T>,
-			remark: Option<Vec<u8>>,
-		},
-		CurrencyRegistered {
-			currency_id: CurrencyId,
-		},
-		CurrencyDeregistered {
-			currency_id: CurrencyId,
-		},
-		AddedToIssueList {
-			account: AccountIdOf<T>,
-			currency_id: CurrencyId,
-		},
-		RemovedFromIssueList {
-			account: AccountIdOf<T>,
-			currency_id: CurrencyId,
-		},
+		/// Event emitted when a currency is deregistered.
+		CurrencyDeregistered { currency_id: CurrencyId },
+		/// Event emitted when a linked account is successfully registered.
 		LinkedAccountRegistered {
 			currency_id: CurrencyId,
 			who: AccountIdOf<T>,
 			foreign_location: MultiLocation,
 		},
-		AddedToRegisterList {
-			account: AccountIdOf<T>,
-			currency_id: CurrencyId,
-		},
-		RemovedFromRegisterList {
-			account: AccountIdOf<T>,
-			currency_id: CurrencyId,
-		},
+		/// Event emitted when an account is added to the register list.
+		AddedToRegisterList { account: AccountIdOf<T>, currency_id: CurrencyId },
+		/// Event emitted when an account is removed from the register list.
+		RemovedFromRegisterList { account: AccountIdOf<T>, currency_id: CurrencyId },
+		/// Event emitted when the crossing minimum amounts are set for a currency.
 		CrossingMinimumAmountSet {
 			currency_id: CurrencyId,
 			cross_in_minimum: BalanceOf<T>,
@@ -138,28 +123,24 @@ pub mod pallet {
 
 	/// The current storage version, we set to 2 our new version(after migrate stroage from vec t
 	/// boundedVec).
-	const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
+	const STORAGE_VERSION: StorageVersion = StorageVersion::new(3);
 
 	/// To store currencies that support indirect cross-in and cross-out.
 	#[pallet::storage]
-	#[pallet::getter(fn get_cross_currency_registry)]
 	pub type CrossCurrencyRegistry<T> = StorageMap<_, Blake2_128Concat, CurrencyId, ()>;
 
 	/// Accounts in the whitelist can issue the corresponding Currency.
 	#[pallet::storage]
-	#[pallet::getter(fn get_issue_whitelist)]
 	pub type IssueWhiteList<T: Config> =
 		StorageMap<_, Blake2_128Concat, CurrencyId, BoundedVec<AccountIdOf<T>, T::MaxLengthLimit>>;
 
 	/// Accounts in the whitelist can register the mapping between a multilocation and an accountId.
 	#[pallet::storage]
-	#[pallet::getter(fn get_register_whitelist)]
-	pub type RegisterWhiteList<T> =
-		StorageMap<_, Blake2_128Concat, CurrencyId, Vec<AccountIdOf<T>>>;
+	pub type RegisterWhiteList<T: Config> =
+		StorageMap<_, Blake2_128Concat, CurrencyId, BoundedVec<AccountIdOf<T>, T::MaxLengthLimit>>;
 
 	/// Mapping a Bifrost account to a multilocation of a outer chain
 	#[pallet::storage]
-	#[pallet::getter(fn account_to_outer_multilocation)]
 	pub type AccountToOuterMultilocation<T> = StorageDoubleMap<
 		_,
 		Blake2_128Concat,
@@ -172,7 +153,6 @@ pub mod pallet {
 
 	/// Mapping a multilocation of a outer chain to a Bifrost account
 	#[pallet::storage]
-	#[pallet::getter(fn outer_multilocation_to_account)]
 	pub type OuterMultilocationToAccount<T> = StorageDoubleMap<
 		_,
 		Blake2_128Concat,
@@ -185,7 +165,6 @@ pub mod pallet {
 
 	/// minimum crossin and crossout amount【crossinMinimum, crossoutMinimum】
 	#[pallet::storage]
-	#[pallet::getter(fn get_crossing_minimum_amount)]
 	pub type CrossingMinimumAmount<T> =
 		StorageMap<_, Blake2_128Concat, CurrencyId, (BalanceOf<T>, BalanceOf<T>)>;
 
@@ -199,58 +178,6 @@ pub mod pallet {
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		#[pallet::call_index(0)]
-		#[pallet::weight(T::WeightInfo::cross_in())]
-		pub fn cross_in(
-			origin: OriginFor<T>,
-			location: Box<MultiLocation>,
-			currency_id: CurrencyId,
-			#[pallet::compact] amount: BalanceOf<T>,
-			remark: Option<Vec<u8>>,
-		) -> DispatchResult {
-			let issuer = ensure_signed(origin)?;
-
-			ensure!(
-				CrossCurrencyRegistry::<T>::contains_key(currency_id),
-				Error::<T>::CurrencyNotSupportCrossInAndOut
-			);
-
-			let crossing_minimum_amount = Self::get_crossing_minimum_amount(currency_id)
-				.ok_or(Error::<T>::NoCrossingMinimumSet)?;
-			ensure!(amount >= crossing_minimum_amount.0, Error::<T>::AmountLowerThanMinimum);
-
-			let issue_whitelist =
-				Self::get_issue_whitelist(currency_id).ok_or(Error::<T>::NotAllowed)?;
-			ensure!(issue_whitelist.contains(&issuer), Error::<T>::NotAllowed);
-
-			let entrance_account_mutlilcaition = Box::new(MultiLocation {
-				parents: 0,
-				interior: X1(AccountId32 {
-					network: Any,
-					id: T::EntrancePalletId::get().into_account_truncating(),
-				}),
-			});
-
-			// If the cross_in destination is entrance account, it is not required to be registered.
-			let dest = if entrance_account_mutlilcaition == location {
-				T::EntrancePalletId::get().into_account_truncating()
-			} else {
-				Self::outer_multilocation_to_account(currency_id, location.clone())
-					.ok_or(Error::<T>::NoAccountIdMapping)?
-			};
-
-			T::MultiCurrency::deposit(currency_id, &dest, amount)?;
-
-			Self::deposit_event(Event::CrossedIn {
-				dest,
-				currency_id,
-				location: *location,
-				amount,
-				remark,
-			});
-			Ok(())
-		}
-
 		/// Destroy some balance from an account and issue cross-out event.
 		#[pallet::call_index(1)]
 		#[pallet::weight(T::WeightInfo::cross_out())]
@@ -266,7 +193,7 @@ pub mod pallet {
 				Error::<T>::CurrencyNotSupportCrossInAndOut
 			);
 
-			let crossing_minimum_amount = Self::get_crossing_minimum_amount(currency_id)
+			let crossing_minimum_amount = CrossingMinimumAmount::<T>::get(currency_id)
 				.ok_or(Error::<T>::NoCrossingMinimumSet)?;
 			ensure!(amount >= crossing_minimum_amount.1, Error::<T>::AmountLowerThanMinimum);
 
@@ -294,7 +221,7 @@ pub mod pallet {
 			let registerer = ensure_signed(origin)?;
 
 			let register_whitelist =
-				Self::get_register_whitelist(currency_id).ok_or(Error::<T>::NotAllowed)?;
+				RegisterWhiteList::<T>::get(currency_id).ok_or(Error::<T>::NotAllowed)?;
 			ensure!(register_whitelist.contains(&registerer), Error::<T>::NotAllowed);
 
 			ensure!(
@@ -344,7 +271,7 @@ pub mod pallet {
 			);
 
 			let original_location =
-				Self::account_to_outer_multilocation(currency_id, account.clone())
+				AccountToOuterMultilocation::<T>::get(currency_id, account.clone())
 					.ok_or(Error::<T>::NotExist)?;
 			ensure!(original_location != *foreign_location.clone(), Error::<T>::AlreadyExist);
 
@@ -368,25 +295,6 @@ pub mod pallet {
 			Ok(())
 		}
 
-		#[pallet::call_index(4)]
-		#[pallet::weight(T::WeightInfo::register_currency_for_cross_in_out())]
-		pub fn register_currency_for_cross_in_out(
-			origin: OriginFor<T>,
-			currency_id: CurrencyId,
-		) -> DispatchResult {
-			T::ControlOrigin::ensure_origin(origin)?;
-
-			CrossCurrencyRegistry::<T>::mutate_exists(currency_id, |registration| {
-				if registration.is_none() {
-					*registration = Some(());
-
-					Self::deposit_event(Event::CurrencyRegistered { currency_id });
-				}
-			});
-
-			Ok(())
-		}
-
 		#[pallet::call_index(5)]
 		#[pallet::weight(T::WeightInfo::deregister_currency_for_cross_in_out())]
 		pub fn deregister_currency_for_cross_in_out(
@@ -402,63 +310,6 @@ pub mod pallet {
 			Ok(())
 		}
 
-		#[pallet::call_index(6)]
-		#[pallet::weight(T::WeightInfo::add_to_issue_whitelist())]
-		pub fn add_to_issue_whitelist(
-			origin: OriginFor<T>,
-			currency_id: CurrencyId,
-			account: AccountIdOf<T>,
-		) -> DispatchResult {
-			T::ControlOrigin::ensure_origin(origin)?;
-
-			let rs = Self::get_issue_whitelist(currency_id);
-			let mut issue_whitelist;
-			if let Some(bounded_vec) = rs {
-				issue_whitelist = bounded_vec.to_vec();
-				ensure!(
-					issue_whitelist.len() < T::MaxLengthLimit::get() as usize,
-					Error::<T>::ExceedMaxLengthLimit
-				);
-				ensure!(!issue_whitelist.contains(&account), Error::<T>::AlreadyExist);
-
-				issue_whitelist.push(account.clone());
-			} else {
-				issue_whitelist = vec![account.clone()];
-			}
-
-			let bounded_issue_whitelist =
-				BoundedVec::try_from(issue_whitelist).map_err(|_| Error::<T>::FailedToConvert)?;
-
-			IssueWhiteList::<T>::insert(currency_id, bounded_issue_whitelist);
-
-			Self::deposit_event(Event::AddedToIssueList { account, currency_id });
-
-			Ok(())
-		}
-
-		#[pallet::call_index(7)]
-		#[pallet::weight(T::WeightInfo::remove_from_issue_whitelist())]
-		pub fn remove_from_issue_whitelist(
-			origin: OriginFor<T>,
-			currency_id: CurrencyId,
-			account: AccountIdOf<T>,
-		) -> DispatchResult {
-			T::ControlOrigin::ensure_origin(origin)?;
-
-			IssueWhiteList::<T>::mutate(currency_id, |issue_whitelist| -> Result<(), Error<T>> {
-				match issue_whitelist {
-					Some(issue_list) if issue_list.contains(&account) => {
-						issue_list.retain(|x| x.clone() != account);
-						Self::deposit_event(Event::RemovedFromIssueList { account, currency_id });
-						Ok(())
-					},
-					_ => Err(Error::<T>::NotExist),
-				}
-			})?;
-
-			Ok(())
-		}
-
 		#[pallet::call_index(8)]
 		#[pallet::weight(T::WeightInfo::add_to_register_whitelist())]
 		pub fn add_to_register_whitelist(
@@ -468,9 +319,8 @@ pub mod pallet {
 		) -> DispatchResult {
 			T::ControlOrigin::ensure_origin(origin)?;
 
-			let empty_vec: Vec<AccountIdOf<T>> = Vec::new();
-			if Self::get_register_whitelist(currency_id) == None {
-				RegisterWhiteList::<T>::insert(currency_id, empty_vec);
+			if RegisterWhiteList::<T>::get(currency_id) == None {
+				RegisterWhiteList::<T>::insert(currency_id, BoundedVec::default());
 			}
 
 			RegisterWhiteList::<T>::mutate(
@@ -478,7 +328,9 @@ pub mod pallet {
 				|register_whitelist| -> Result<(), Error<T>> {
 					match register_whitelist {
 						Some(register_list) if !register_list.contains(&account) => {
-							register_list.push(account.clone());
+							register_list
+								.try_push(account.clone())
+								.map_err(|_| Error::<T>::ListOverflow)?;
 							Self::deposit_event(Event::AddedToRegisterList {
 								account,
 								currency_id,
@@ -538,6 +390,23 @@ pub mod pallet {
 				currency_id,
 				cross_in_minimum,
 				cross_out_minimum,
+			});
+
+			Ok(())
+		}
+	}
+
+	impl<T: Config> Pallet<T> {
+		pub fn register_currency_for_cross_in_out(
+			origin: OriginFor<T>,
+			currency_id: CurrencyId,
+		) -> DispatchResult {
+			T::ControlOrigin::ensure_origin(origin)?;
+
+			CrossCurrencyRegistry::<T>::mutate_exists(currency_id, |registration| {
+				if registration.is_none() {
+					*registration = Some(());
+				}
 			});
 
 			Ok(())

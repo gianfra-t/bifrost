@@ -20,28 +20,39 @@
 
 #![cfg(test)]
 #![allow(non_upper_case_globals)]
+pub use super::*;
 
 use bifrost_asset_registry::AssetIdMaps;
-pub use bifrost_primitives::{currency::*, CurrencyId, SlpxOperator, TokenSymbol};
+pub use bifrost_primitives::{currency::*, CurrencyId, Moment, SlpxOperator};
+use bifrost_primitives::{
+	BifrostEntranceAccount, BifrostExitAccount, BifrostFeeAccount, FeeSharePalletId,
+	IncentivePoolAccount, MoonbeamChainId, PriceDetail, ZenlinkPalletId,
+};
 use bifrost_slp::{QueryId, QueryResponseManager};
 pub use cumulus_primitives_core::ParaId;
 use frame_support::{
 	derive_impl, ord_parameter_types,
 	pallet_prelude::Get,
 	parameter_types,
-	sp_runtime::{DispatchError, DispatchResult},
+	sp_runtime::{DispatchError, DispatchResult, FixedPointNumber},
 	traits::{Everything, Nothing},
-	PalletId,
 };
 use frame_system::{EnsureRoot, EnsureSignedBy};
-use hex_literal::hex;
-use orml_traits::{location::RelativeReserveProvider, parameter_type_with_key, MultiCurrency};
+use orml_traits::{
+	location::RelativeReserveProvider, parameter_type_with_key, DataFeeder, DataProvider,
+	DataProviderExtended, MultiCurrency,
+};
 use sp_core::ConstU32;
 use sp_runtime::{
 	traits::{AccountIdConversion, IdentityLookup, UniqueSaturatedInto},
 	AccountId32, BuildStorage, SaturatedConversion,
 };
 use sp_std::marker::PhantomData;
+use std::{
+	cell::RefCell,
+	collections::HashMap,
+	hash::{Hash, Hasher},
+};
 use xcm::{prelude::*, v3::Weight};
 use xcm_builder::{FixedWeightBounds, FrameTransactionalProcessor};
 use xcm_executor::XcmExecutor;
@@ -74,6 +85,7 @@ frame_support::construct_runtime!(
 		ZenlinkProtocol: zenlink_protocol,
 		AssetRegistry: bifrost_asset_registry,
 		PolkadotXcm: pallet_xcm,
+		Prices: pallet_prices::{Pallet, Storage, Call, Event<T>},
 	}
 );
 
@@ -102,7 +114,7 @@ impl frame_system::Config for Runtime {
 }
 
 parameter_types! {
-	pub const GetNativeCurrencyId: CurrencyId = CurrencyId::Native(TokenSymbol::ASG);
+	pub const GetNativeCurrencyId: CurrencyId = ASG;
 }
 
 pub type AdaptedBasicCurrency =
@@ -156,13 +168,11 @@ impl orml_tokens::Config for Runtime {
 
 parameter_types! {
 	pub const TreasuryAccount: AccountId32 = TREASURY_ACCOUNT;
-	pub BifrostVsbondAccount: PalletId = PalletId(*b"bf/salpb");
-	pub const FeeSharePalletId: PalletId = PalletId(*b"bf/feesh");
 }
 
 ord_parameter_types! {
 	pub const One: AccountId = ALICE;
-	pub const RelayCurrencyId: CurrencyId = CurrencyId::Token(TokenSymbol::KSM);
+	pub const RelayCurrencyId: CurrencyId = KSM;
 }
 
 impl bifrost_fee_share::Config for Runtime {
@@ -171,6 +181,115 @@ impl bifrost_fee_share::Config for Runtime {
 	type ControlOrigin = EnsureSignedBy<One, AccountId>;
 	type WeightInfo = ();
 	type FeeSharePalletId = FeeSharePalletId;
+	type OraclePriceProvider = MockOraclePriceProvider;
+}
+
+impl pallet_prices::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type Source = MockDataProvider;
+	type FeederOrigin = EnsureRoot<AccountId>;
+	type UpdateOrigin = EnsureRoot<AccountId>;
+	type RelayCurrency = RelayCurrencyId;
+	type Assets = Currencies;
+	type CurrencyIdConvert = AssetIdMaps<Runtime>;
+	type WeightInfo = ();
+}
+
+// pallet-price is using for benchmark compilation
+pub type TimeStampedPrice = orml_oracle::TimestampedValue<Price, Moment>;
+pub struct MockDataProvider;
+impl DataProvider<CurrencyId, TimeStampedPrice> for MockDataProvider {
+	fn get(_asset_id: &CurrencyId) -> Option<TimeStampedPrice> {
+		Some(TimeStampedPrice { value: Price::saturating_from_integer(100), timestamp: 0 })
+	}
+}
+
+impl DataProviderExtended<CurrencyId, TimeStampedPrice> for MockDataProvider {
+	fn get_no_op(_key: &CurrencyId) -> Option<TimeStampedPrice> {
+		None
+	}
+
+	fn get_all_values() -> Vec<(CurrencyId, Option<TimeStampedPrice>)> {
+		vec![]
+	}
+}
+
+impl DataFeeder<CurrencyId, TimeStampedPrice, AccountId> for MockDataProvider {
+	fn feed_value(
+		_: Option<AccountId>,
+		_: CurrencyId,
+		_: TimeStampedPrice,
+	) -> sp_runtime::DispatchResult {
+		Ok(())
+	}
+}
+pub struct MockOraclePriceProvider;
+#[derive(Encode, Decode, Clone, Copy, RuntimeDebug)]
+pub struct CurrencyIdWrap(CurrencyId);
+
+impl Hash for CurrencyIdWrap {
+	fn hash<H: Hasher>(&self, state: &mut H) {
+		state.write_u8(1);
+	}
+}
+
+impl PartialEq for CurrencyIdWrap {
+	fn eq(&self, other: &Self) -> bool {
+		self.0 == other.0
+	}
+}
+
+impl Eq for CurrencyIdWrap {}
+
+impl MockOraclePriceProvider {
+	thread_local! {
+		pub static PRICES: RefCell<HashMap<CurrencyIdWrap, Option<PriceDetail>>> = {
+			RefCell::new(
+				vec![BNC, DOT, KSM, DOT_U, VKSM, VDOT, PHA]
+					.iter()
+					.map(|&x| (CurrencyIdWrap(x), Some((Price::saturating_from_integer(1), 1))))
+					.collect()
+			)
+		};
+	}
+
+	pub fn set_price(asset_id: CurrencyId, price: Price) {
+		Self::PRICES.with(|prices| {
+			prices.borrow_mut().insert(CurrencyIdWrap(asset_id), Some((price, 1u64)));
+		});
+	}
+
+	pub fn reset() {
+		Self::PRICES.with(|prices| {
+			for (_, val) in prices.borrow_mut().iter_mut() {
+				*val = Some((Price::saturating_from_integer(1), 1u64));
+			}
+		})
+	}
+}
+
+impl OraclePriceProvider for MockOraclePriceProvider {
+	fn get_price(asset_id: &CurrencyId) -> Option<PriceDetail> {
+		Self::PRICES.with(|prices| *prices.borrow().get(&CurrencyIdWrap(*asset_id)).unwrap())
+	}
+
+	fn get_amount_by_prices(
+		_currency_in: &CurrencyId,
+		_amount_in: bifrost_primitives::Balance,
+		_currency_in_price: Price,
+		_currency_out: &CurrencyId,
+		_currency_out_price: Price,
+	) -> Option<bifrost_primitives::Balance> {
+		todo!()
+	}
+
+	fn get_oracle_amount_by_currency_and_amount_in(
+		_currency_in: &CurrencyId,
+		_amount_in: bifrost_primitives::Balance,
+		_currency_out: &CurrencyId,
+	) -> Option<(bifrost_primitives::Balance, Price, Price)> {
+		todo!()
+	}
 }
 
 pub struct ParaInfo;
@@ -225,13 +344,11 @@ impl bifrost_slp::Config for Runtime {
 	type ControlOrigin = EnsureSignedBy<One, AccountId>;
 	type WeightInfo = ();
 	type VtokenMinting = VtokenMinting;
-	type BifrostSlpx = SlpxInterface;
 	type AccountConverter = ();
 	type ParachainId = ParachainId;
 	type SubstrateResponseManager = SubstrateResponseManager;
 	type MaxTypeEntryPerBlock = MaxTypeEntryPerBlock;
 	type MaxRefundPerBlock = MaxRefundPerBlock;
-	type OnRefund = ();
 	type ParachainStaking = ();
 	type XcmTransfer = XTokens;
 	type MaxLengthLimit = MaxLengthLimit;
@@ -276,10 +393,6 @@ impl orml_xtokens::Config for Runtime {
 parameter_types! {
 	pub const MaximumUnlockIdOfUser: u32 = 10;
 	pub const MaximumUnlockIdOfTimeUnit: u32 = 50;
-	pub BifrostEntranceAccount: PalletId = PalletId(*b"bf/vtkin");
-	pub BifrostExitAccount: PalletId = PalletId(*b"bf/vtout");
-	pub BifrostFeeAccount: AccountId = hex!["e4da05f08e89bf6c43260d96f26fffcfc7deae5b465da08669a9d008e64c2c63"].into();
-	pub IncentivePoolAccount: PalletId = PalletId(*b"bf/inpoo");
 }
 
 impl bifrost_vtoken_minting::Config for Runtime {
@@ -292,28 +405,19 @@ impl bifrost_vtoken_minting::Config for Runtime {
 	type ExitAccount = BifrostExitAccount;
 	type FeeAccount = BifrostFeeAccount;
 	type RedeemFeeAccount = BifrostFeeAccount;
-	type BifrostSlp = Slp;
 	type BifrostSlpx = SlpxInterface;
 	type RelayChainToken = RelayCurrencyId;
-	type CurrencyIdConversion = AssetIdMaps<Runtime>;
-	type CurrencyIdRegister = AssetIdMaps<Runtime>;
 	type WeightInfo = ();
 	type OnRedeemSuccess = ();
 	type XcmTransfer = XTokens;
-	type AstarParachainId = ConstU32<2007>;
-	type MoonbeamParachainId = ConstU32<2023>;
-	type HydradxParachainId = ConstU32<2034>;
-	type MantaParachainId = ConstU32<2104>;
-	type InterlayParachainId = ConstU32<2032>;
+	type MoonbeamChainId = MoonbeamChainId;
 	type ChannelCommission = ();
 	type MaxLockRecords = ConstU32<100>;
 	type IncentivePoolAccount = IncentivePoolAccount;
-	type VeMinting = ();
-	type AssetIdMaps = AssetIdMaps<Runtime>;
+	type BbBNC = ();
 }
 
 parameter_types! {
-	pub const ZenlinkPalletId: PalletId = PalletId(*b"/zenlink");
 	pub const GetExchangeFee: (u32, u32) = (3, 1000);   // 0.3%
 	pub const SelfParaId: u32 = 2001;
 }
@@ -424,6 +528,10 @@ impl xcm_executor::Config for XcmConfig {
 	type AssetExchanger = ();
 	type Aliasers = Nothing;
 	type TransactionalProcessor = FrameTransactionalProcessor;
+	type HrmpNewChannelOpenRequestHandler = ();
+	type HrmpChannelAcceptedHandler = ();
+	type HrmpChannelClosingHandler = ();
+	type XcmRecorder = ();
 }
 
 #[cfg(feature = "runtime-benchmarks")]
@@ -487,6 +595,7 @@ impl ExtBuilder {
 	}
 
 	pub fn build(self) -> sp_io::TestExternalities {
+		env_logger::try_init().unwrap_or(());
 		let mut t = frame_system::GenesisConfig::<Runtime>::default().build_storage().unwrap();
 
 		pallet_balances::GenesisConfig::<Runtime> {

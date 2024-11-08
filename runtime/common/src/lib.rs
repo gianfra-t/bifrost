@@ -31,6 +31,8 @@ use sp_runtime::{traits::Bounded, FixedPointNumber, Perquintill};
 
 pub mod constants;
 pub mod currency_adapter;
+pub mod currency_converter;
+pub mod xcm_weight_trader;
 
 #[cfg(test)]
 mod tests;
@@ -43,7 +45,7 @@ impl<T: cumulus_pallet_parachain_system::Config> BlockNumberProvider
 	type BlockNumber = BlockNumber;
 
 	fn current_block_number() -> Self::BlockNumber {
-		cumulus_pallet_parachain_system::Pallet::<T>::validation_data()
+		cumulus_pallet_parachain_system::ValidationData::<T>::get()
 			.map(|d| d.relay_parent_number)
 			.unwrap_or_default()
 	}
@@ -127,7 +129,7 @@ impl<T: cumulus_pallet_parachain_system::Config> BlockNumberProvider
 	type BlockNumber = BlockNumber;
 
 	fn current_block_number() -> Self::BlockNumber {
-		cumulus_pallet_parachain_system::Pallet::<T>::validation_data()
+		cumulus_pallet_parachain_system::ValidationData::<T>::get()
 			.map(|d| d.relay_parent_number)
 			.unwrap_or_default()
 	}

@@ -27,7 +27,6 @@ use frame_system::RawOrigin;
 use sp_runtime::traits::UniqueSaturatedFrom;
 
 use super::*;
-#[allow(unused_imports)]
 use crate::Pallet as ChannelCommission;
 
 benchmarks! {
@@ -181,7 +180,7 @@ benchmarks! {
 			// set channel share
 			let old_amount: BalanceOf<T> = 2000u128.unique_saturated_into();
 			let new_amount: BalanceOf<T> = 500u128.unique_saturated_into();
-			ChannelVtokenShares::<T>::insert(0, vtoken, share.clone());
+			ChannelVtokenShares::<T>::insert(0, vtoken, share);
 			PeriodChannelVtokenMint::<T>::insert(0, vtoken, (old_amount, new_amount));
 		}
 

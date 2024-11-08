@@ -1469,121 +1469,6 @@ fn manta_transfer_to_works() {
 }
 
 #[test]
-fn supplement_fee_account_whitelist_works() {
-	let bifrost_parachain_account_id_32 = Sibling::from(2030).into_account_truncating();
-
-	let subaccount_0_account_id_32 =
-		Utility::derivative_account_id(bifrost_parachain_account_id_32, 0).into();
-
-	let subaccount_0_location = MultiLocation {
-		parents: 1,
-		interior: X2(
-			Parachain(2104),
-			Junction::AccountId32 { network: None, id: subaccount_0_account_id_32 },
-		),
-	};
-
-	ExtBuilder::default().build().execute_with(|| {
-		// environment setup
-		manta_setup();
-		let entrance_account_id_32: [u8; 32] = PalletId(*b"bf/vtkin").into_account_truncating();
-		let entrance_account_id: AccountId = entrance_account_id_32.into();
-
-		let entrance_account_location = MultiLocation {
-			parents: 0,
-			interior: X1(Junction::AccountId32 { network: None, id: entrance_account_id_32 }),
-		};
-
-		let exit_account_id_32 = PalletId(*b"bf/vtout").into_account_truncating();
-		let exit_account_location = MultiLocation {
-			parents: 0,
-			interior: X1(Junction::AccountId32 { network: None, id: exit_account_id_32 }),
-		};
-
-		let source_account_id_32 = ALICE.into();
-		let source_location = Slp::account_32_to_local_location(source_account_id_32).unwrap();
-		assert_ok!(Slp::set_fee_source(
-			RuntimeOrigin::signed(ALICE),
-			MANTA,
-			Some((source_location, 1_000_000_000_000_000_000))
-		));
-
-		// Dest should be one of delegators, operateOrigins or accounts in the whitelist.
-		assert_ok!(Slp::supplement_fee_reserve(
-			RuntimeOrigin::signed(ALICE),
-			MANTA,
-			Box::new(subaccount_0_location),
-		));
-
-		assert_noop!(
-			Slp::supplement_fee_reserve(
-				RuntimeOrigin::signed(ALICE),
-				MANTA,
-				Box::new(entrance_account_location),
-			),
-			Error::<Runtime>::DestAccountNotValid
-		);
-
-		// register entrance_account_location as operateOrigin
-		assert_ok!(Slp::set_operate_origin(
-			RuntimeOrigin::signed(ALICE),
-			MANTA,
-			Some(entrance_account_id)
-		));
-
-		assert_noop!(
-			Slp::supplement_fee_reserve(
-				RuntimeOrigin::signed(ALICE),
-				MANTA,
-				Box::new(entrance_account_location),
-			),
-			Error::<Runtime>::TransferToError
-		);
-
-		assert_noop!(
-			Slp::supplement_fee_reserve(
-				RuntimeOrigin::signed(ALICE),
-				MANTA,
-				Box::new(exit_account_location),
-			),
-			Error::<Runtime>::DestAccountNotValid
-		);
-
-		// register exit_account_location into whitelist
-		assert_ok!(Slp::add_supplement_fee_account_to_whitelist(
-			RuntimeOrigin::signed(ALICE),
-			MANTA,
-			Box::new(exit_account_location),
-		));
-
-		assert_noop!(
-			Slp::supplement_fee_reserve(
-				RuntimeOrigin::signed(ALICE),
-				MANTA,
-				Box::new(exit_account_location),
-			),
-			Error::<Runtime>::TransferToError
-		);
-
-		// remove exit_account_location from whitelist
-		assert_ok!(Slp::remove_supplement_fee_account_from_whitelist(
-			RuntimeOrigin::signed(ALICE),
-			MANTA,
-			Box::new(exit_account_location),
-		));
-
-		assert_noop!(
-			Slp::supplement_fee_reserve(
-				RuntimeOrigin::signed(ALICE),
-				MANTA,
-				Box::new(exit_account_location),
-			),
-			Error::<Runtime>::DestAccountNotValid
-		);
-	});
-}
-
-#[test]
 fn charge_host_fee_and_tune_vtoken_exchange_rate_works() {
 	let bifrost_parachain_account_id_32 = Sibling::from(2030).into_account_truncating();
 
@@ -1734,7 +1619,7 @@ fn add_validator_and_remove_validator_works() {
 
 		let bounded_valis = BoundedVec::try_from(valis).unwrap();
 
-		assert_eq!(Slp::get_validators(MANTA), Some(bounded_valis));
+		assert_eq!(Validators::<Runtime>::get(MANTA), Some(bounded_valis));
 
 		assert_ok!(Slp::remove_validator(
 			RuntimeOrigin::signed(ALICE),
@@ -1743,7 +1628,7 @@ fn add_validator_and_remove_validator_works() {
 		));
 
 		let empty_bounded_vec = BoundedVec::default();
-		assert_eq!(Slp::get_validators(MANTA), Some(empty_bounded_vec));
+		assert_eq!(Validators::<Runtime>::get(MANTA), Some(empty_bounded_vec));
 	});
 }
 
@@ -1770,7 +1655,7 @@ fn reset_validators_should_work() {
 			validator_list_input
 		));
 
-		assert_eq!(Slp::get_validators(MANTA), Some(validator_list_output));
+		assert_eq!(Validators::<Runtime>::get(MANTA), Some(validator_list_output));
 	});
 }
 
@@ -1810,9 +1695,12 @@ fn set_validator_boost_list_should_work() {
 
 		let bounded_validator_list_output_1 =
 			BoundedVec::try_from(validator_list_output_1).unwrap();
-		assert_eq!(Slp::get_validator_boost_list(MANTA), Some(bounded_validator_list_output_1));
+		assert_eq!(
+			ValidatorBoostList::<Runtime>::get(MANTA),
+			Some(bounded_validator_list_output_1)
+		);
 		let bounded_validator_0 = BoundedVec::try_from(vec![VALIDATOR_0_LOCATION]).unwrap();
-		assert_eq!(Slp::get_validators(MANTA), Some(bounded_validator_0));
+		assert_eq!(Validators::<Runtime>::get(MANTA), Some(bounded_validator_0));
 
 		System::set_block_number(400);
 
@@ -1824,10 +1712,13 @@ fn set_validator_boost_list_should_work() {
 
 		let bounded_validator_list_output_2 =
 			BoundedVec::try_from(validator_list_output_2).unwrap();
-		assert_eq!(Slp::get_validator_boost_list(MANTA), Some(bounded_validator_list_output_2));
+		assert_eq!(
+			ValidatorBoostList::<Runtime>::get(MANTA),
+			Some(bounded_validator_list_output_2)
+		);
 		let bounded_validator_0_1 =
 			BoundedVec::try_from(vec![VALIDATOR_0_LOCATION, VALIDATOR_1_LOCATION]).unwrap();
-		assert_eq!(Slp::get_validators(MANTA), Some(bounded_validator_0_1),);
+		assert_eq!(Validators::<Runtime>::get(MANTA), Some(bounded_validator_0_1),);
 	});
 }
 
@@ -1855,10 +1746,10 @@ fn add_to_validator_boost_list_should_work() {
 			Box::new(VALIDATOR_0_LOCATION)
 		));
 
-		assert_eq!(Slp::get_validator_boost_list(MANTA), Some(validator_list_output_1));
+		assert_eq!(ValidatorBoostList::<Runtime>::get(MANTA), Some(validator_list_output_1));
 
 		let bounded_validator_0 = BoundedVec::try_from(vec![VALIDATOR_0_LOCATION]).unwrap();
-		assert_eq!(Slp::get_validators(MANTA), Some(bounded_validator_0.clone()));
+		assert_eq!(Validators::<Runtime>::get(MANTA), Some(bounded_validator_0.clone()));
 
 		System::set_block_number(400);
 
@@ -1868,9 +1759,9 @@ fn add_to_validator_boost_list_should_work() {
 			Box::new(VALIDATOR_0_LOCATION)
 		));
 
-		assert_eq!(Slp::get_validators(MANTA), Some(bounded_validator_0));
+		assert_eq!(Validators::<Runtime>::get(MANTA), Some(bounded_validator_0));
 
-		assert_eq!(Slp::get_validator_boost_list(MANTA), Some(validator_list_output_2));
+		assert_eq!(ValidatorBoostList::<Runtime>::get(MANTA), Some(validator_list_output_2));
 
 		assert_ok!(Slp::add_to_validator_boost_list(
 			RuntimeOrigin::signed(ALICE),
@@ -1878,10 +1769,10 @@ fn add_to_validator_boost_list_should_work() {
 			Box::new(VALIDATOR_1_LOCATION)
 		));
 
-		assert_eq!(Slp::get_validator_boost_list(MANTA), Some(validator_list_output_3));
+		assert_eq!(ValidatorBoostList::<Runtime>::get(MANTA), Some(validator_list_output_3));
 		let bounded_validator_0_1 =
 			BoundedVec::try_from(vec![VALIDATOR_0_LOCATION, VALIDATOR_1_LOCATION]).unwrap();
-		assert_eq!(Slp::get_validators(MANTA), Some(bounded_validator_0_1),);
+		assert_eq!(Validators::<Runtime>::get(MANTA), Some(bounded_validator_0_1),);
 	});
 }
 
@@ -1899,7 +1790,7 @@ fn remove_from_validator_boost_list_should_work() {
 			Box::new(VALIDATOR_0_LOCATION)
 		));
 
-		assert_eq!(Slp::get_validator_boost_list(MANTA), Some(validator_list_output.clone()));
+		assert_eq!(ValidatorBoostList::<Runtime>::get(MANTA), Some(validator_list_output.clone()));
 
 		assert_ok!(Slp::remove_from_validator_boot_list(
 			RuntimeOrigin::signed(ALICE),
@@ -1907,7 +1798,7 @@ fn remove_from_validator_boost_list_should_work() {
 			Box::new(VALIDATOR_1_LOCATION)
 		));
 
-		assert_eq!(Slp::get_validator_boost_list(MANTA), Some(validator_list_output));
+		assert_eq!(ValidatorBoostList::<Runtime>::get(MANTA), Some(validator_list_output));
 
 		assert_ok!(Slp::remove_from_validator_boot_list(
 			RuntimeOrigin::signed(ALICE),
@@ -1915,7 +1806,7 @@ fn remove_from_validator_boost_list_should_work() {
 			Box::new(VALIDATOR_0_LOCATION)
 		));
 
-		assert_eq!(Slp::get_validator_boost_list(MANTA), None);
+		assert_eq!(ValidatorBoostList::<Runtime>::get(MANTA), None);
 	});
 }
 
@@ -1949,10 +1840,10 @@ fn clean_outdated_validator_boost_list_work() {
 			Box::new(VALIDATOR_0_LOCATION)
 		));
 
-		assert_eq!(Slp::get_validator_boost_list(MANTA), Some(validator_list_output_1));
+		assert_eq!(ValidatorBoostList::<Runtime>::get(MANTA), Some(validator_list_output_1));
 
 		let bounded_validator_0 = BoundedVec::try_from(vec![VALIDATOR_0_LOCATION]).unwrap();
-		assert_eq!(Slp::get_validators(MANTA), Some(bounded_validator_0.clone()));
+		assert_eq!(Validators::<Runtime>::get(MANTA), Some(bounded_validator_0.clone()));
 
 		System::set_block_number(400);
 
@@ -1962,9 +1853,12 @@ fn clean_outdated_validator_boost_list_work() {
 			Box::new(VALIDATOR_0_LOCATION)
 		));
 
-		assert_eq!(Slp::get_validators(MANTA), Some(bounded_validator_0));
+		assert_eq!(Validators::<Runtime>::get(MANTA), Some(bounded_validator_0));
 
-		assert_eq!(Slp::get_validator_boost_list(MANTA), Some(validator_list_output_2.clone()));
+		assert_eq!(
+			ValidatorBoostList::<Runtime>::get(MANTA),
+			Some(validator_list_output_2.clone())
+		);
 
 		assert_ok!(Slp::add_to_validator_boost_list(
 			RuntimeOrigin::signed(ALICE),
@@ -1972,10 +1866,13 @@ fn clean_outdated_validator_boost_list_work() {
 			Box::new(VALIDATOR_1_LOCATION)
 		));
 
-		assert_eq!(Slp::get_validator_boost_list(MANTA), Some(validator_list_output_3.clone()));
+		assert_eq!(
+			ValidatorBoostList::<Runtime>::get(MANTA),
+			Some(validator_list_output_3.clone())
+		);
 		let bounded_validator_0_1 =
 			BoundedVec::try_from(vec![VALIDATOR_0_LOCATION, VALIDATOR_1_LOCATION]).unwrap();
-		assert_eq!(Slp::get_validators(MANTA), Some(bounded_validator_0_1),);
+		assert_eq!(Validators::<Runtime>::get(MANTA), Some(bounded_validator_0_1),);
 
 		// no validator due yet. Everything should be kept after calling
 		// clean_outdated_validator_boost_list
@@ -1986,7 +1883,7 @@ fn clean_outdated_validator_boost_list_work() {
 			MANTA,
 			1
 		));
-		assert_eq!(Slp::get_validator_boost_list(MANTA), Some(validator_list_output_3));
+		assert_eq!(ValidatorBoostList::<Runtime>::get(MANTA), Some(validator_list_output_3));
 
 		// move to block SIX_MONTHS + 400, validator 1 should be removable
 		System::set_block_number(400 + SIX_MONTHS as u64);
@@ -2003,7 +1900,10 @@ fn clean_outdated_validator_boost_list_work() {
 			MANTA,
 			1
 		));
-		assert_eq!(Slp::get_validator_boost_list(MANTA), Some(validator_list_output_2.clone()));
+		assert_eq!(
+			ValidatorBoostList::<Runtime>::get(MANTA),
+			Some(validator_list_output_2.clone())
+		);
 
 		// do it again
 		assert_ok!(Slp::clean_outdated_validator_boost_list(
@@ -2011,7 +1911,7 @@ fn clean_outdated_validator_boost_list_work() {
 			MANTA,
 			1
 		));
-		assert_eq!(Slp::get_validator_boost_list(MANTA), Some(validator_list_output_2));
+		assert_eq!(ValidatorBoostList::<Runtime>::get(MANTA), Some(validator_list_output_2));
 
 		assert_noop!(
 			Slp::clean_outdated_validator_boost_list(RuntimeOrigin::signed(ALICE), MANTA, 2),

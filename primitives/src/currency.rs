@@ -44,6 +44,8 @@ pub const VSKSM: CurrencyId = CurrencyId::VSToken(TokenSymbol::KSM);
 pub const PHA: CurrencyId = CurrencyId::Token(TokenSymbol::PHA);
 pub const VPHA: CurrencyId = CurrencyId::VToken(TokenSymbol::PHA);
 pub const ZLK: CurrencyId = CurrencyId::Token(TokenSymbol::ZLK);
+pub const KUSD: CurrencyId = CurrencyId::Stable(TokenSymbol::KUSD);
+pub const ASG: CurrencyId = CurrencyId::Native(TokenSymbol::ASG);
 
 pub const DOT_TOKEN_ID: u8 = 0u8;
 pub const DOT: CurrencyId = CurrencyId::Token2(DOT_TOKEN_ID);
@@ -55,20 +57,47 @@ pub const DOT_U_TOKEN_ID: u8 = 2u8;
 pub const DOT_U: CurrencyId = CurrencyId::Token2(DOT_U_TOKEN_ID);
 pub const ASTR_TOKEN_ID: u8 = 3u8;
 pub const ASTR: CurrencyId = CurrencyId::Token2(ASTR_TOKEN_ID);
+pub const VASTR: CurrencyId = CurrencyId::VToken2(ASTR_TOKEN_ID);
 pub const FIL_TOKEN_ID: u8 = 4u8;
 pub const FIL: CurrencyId = CurrencyId::Token2(FIL_TOKEN_ID);
 pub const VFIL: CurrencyId = CurrencyId::VToken2(FIL_TOKEN_ID);
+pub const USDC_TOKEN_ID: u8 = 5u8;
+pub const USDC: CurrencyId = CurrencyId::Token2(USDC_TOKEN_ID);
+pub const IBTC_TOKEN_ID: u8 = 6u8;
+pub const IBTC: CurrencyId = CurrencyId::Token2(IBTC_TOKEN_ID);
+pub const INTR_TOKEN_ID: u8 = 7u8;
+pub const INTR: CurrencyId = CurrencyId::Token2(INTR_TOKEN_ID);
 pub const MANTA_TOKEN_ID: u8 = 8u8;
 pub const MANTA: CurrencyId = CurrencyId::Token2(MANTA_TOKEN_ID);
 pub const VMANTA: CurrencyId = CurrencyId::VToken2(MANTA_TOKEN_ID);
+pub const BNCS_TOKEN_ID: u8 = 9u8;
+pub const BNCS: CurrencyId = CurrencyId::Token2(BNCS_TOKEN_ID);
+pub const PINK_TOKEN_ID: u8 = 10u8;
+pub const PINK: CurrencyId = CurrencyId::Token2(PINK_TOKEN_ID);
+pub const DED_TOKEN_ID: u8 = 11u8;
+pub const DED: CurrencyId = CurrencyId::Token2(DED_TOKEN_ID);
+pub const PEN_TOKEN_ID: u8 = 12u8;
+pub const PEN: CurrencyId = CurrencyId::Token2(PEN_TOKEN_ID);
+pub const WETH_TOKEN_ID: u8 = 13u8;
+pub const WETH: CurrencyId = CurrencyId::Token2(WETH_TOKEN_ID);
 pub const VSBOND_BNC_2001_0_8: CurrencyId = CurrencyId::VSBond(TokenSymbol::BNC, 2001, 0, 8);
 pub const CLOUD_TOKEN_ID: u8 = 12u8;
 pub const CLOUD: CurrencyId = CurrencyId::Token2(CLOUD_TOKEN_ID);
+pub const VBNC_P_TOKEN_ID: u8 = 5u8;
+pub const VBNC_P: CurrencyId = CurrencyId::VToken2(VBNC_P_TOKEN_ID);
 
 pub const LDOT: CurrencyId = CurrencyId::Lend(0);
 pub const LKSM: CurrencyId = CurrencyId::Lend(1);
 pub const LUSDT: CurrencyId = CurrencyId::Lend(2);
 pub const LVDOT: CurrencyId = CurrencyId::Lend(3);
+pub const BLP_BNC_VBNC: CurrencyId = CurrencyId::BLP(2);
+pub const LP_BNC_VBNC: CurrencyId = CurrencyId::LPToken(TokenSymbol::ASG, 0, TokenSymbol::BNC, 1);
+pub const KUSAMA_VBNC_ASSET_INDEX: AssetId =
+	AssetId { chain_id: 2001, asset_type: 2, asset_index: 257 };
+pub const KUSAMA_VBNC_LP_ASSET_INDEX: AssetId =
+	AssetId { chain_id: 2001, asset_type: 2, asset_index: 1103806596608 };
+pub const KUSAMA_BNC_ASSET_INDEX: AssetId =
+	AssetId { chain_id: 2001, asset_type: 0, asset_index: 0 };
 
 macro_rules! create_currency_id {
 	($(#[$meta:meta])*

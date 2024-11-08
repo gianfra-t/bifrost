@@ -33,14 +33,14 @@ use frame_support::{
 	pallet_prelude::*,
 	traits::{
 		fungibles::Mutate,
-		tokens::{Fortitude, Precision},
+		tokens::{Fortitude, Precision, Preservation},
 	},
 	transactional, BoundedVec,
 };
 use frame_system::{ensure_signed, pallet_prelude::*};
 pub use pallet_traits::{
 	ConvertToBigUint, LendMarket as LendMarketTrait, LendMarketMarketDataProvider,
-	LendMarketPositionDataProvider, MarketInfo, MarketStatus, PriceFeeder,
+	LendMarketPositionDataProvider, MarketInfo, MarketStatus,
 };
 pub use parity_scale_codec::{Decode, Encode};
 use sp_runtime::{
@@ -87,23 +87,36 @@ pub mod pallet {
 
 	#[pallet::error]
 	pub enum Error<T> {
+		/// Arguments error, old rate is equal to new rate
 		ArgumentsError,
+		/// Not support token type
 		NotSupportTokenType,
 	}
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub (crate) fn deposit_event)]
 	pub enum Event<T: Config> {
+		/// User's leverage rate has been changed.
 		FlashLoanDeposited {
+			/// Account who change the leverage rate.
 			who: AccountIdOf<T>,
+			/// The asset id of the token.
 			asset_id: AssetIdOf<T>,
+			/// The old leverage rate.
 			old_rate: Rate,
+			/// The new leverage rate.
 			new_rate: Rate,
 		},
 	}
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
+		/// Deposit flash loan
+		///
+		/// Using borrowed funds to increase the amount of liquid staking (yield-bearing) assets.
+		///
+		/// - `asset_id`: The asset id of the token
+		/// - `rate`: Leverage rate
 		#[pallet::call_index(0)]
 		#[pallet::weight(<T as pallet::Config>::WeightInfo::flash_loan_deposit())]
 		pub fn flash_loan_deposit(
@@ -111,7 +124,9 @@ pub mod pallet {
 			asset_id: AssetIdOf<T>,
 			rate: Rate,
 		) -> DispatchResult {
-			Pallet::<T>::flash_loan_deposit_inner(origin, asset_id, rate)
+			let who = ensure_signed(origin)?;
+
+			Pallet::<T>::flash_loan_deposit_inner(who, asset_id, rate)
 		}
 	}
 }
@@ -119,12 +134,10 @@ pub mod pallet {
 impl<T: Config> Pallet<T> {
 	#[transactional]
 	pub fn flash_loan_deposit_inner(
-		origin: OriginFor<T>,
+		who: AccountIdOf<T>,
 		asset_id: AssetIdOf<T>,
 		rate: Rate,
 	) -> DispatchResult {
-		let who = ensure_signed(origin)?;
-
 		let vtoken_id = T::CurrencyIdConversion::convert_to_vtoken(asset_id)
 			.map_err(|_| Error::<T>::NotSupportTokenType)?;
 
@@ -136,9 +149,13 @@ impl<T: Config> Pallet<T> {
 		let account_borrows = lend_market::Pallet::<T>::get_current_borrow_balance(&who, asset_id)?;
 
 		// Formula
-		// current_rate = account_borrows / ( vtoken_to_token(account_deposits) - account_borrows )
-		let deposits_token_value =
-			T::VtokenMinting::vtoken_to_token(asset_id, vtoken_id, account_deposits)?;
+		// current_rate = account_borrows / (
+		// get_currency_amount_by_v_currency_amount(account_deposits) - account_borrows )
+		let deposits_token_value = T::VtokenMinting::get_currency_amount_by_v_currency_amount(
+			asset_id,
+			vtoken_id,
+			account_deposits,
+		)?;
 		let base_token_value = deposits_token_value
 			.checked_sub(account_borrows)
 			.ok_or(ArithmeticError::Overflow)?;
@@ -182,7 +199,7 @@ impl<T: Config> Pallet<T> {
 	) -> DispatchResult {
 		let (pool_id, currency_id_in, currency_id_out) =
 			T::StablePoolHandler::get_pool_id(&vtoken_id, &asset_id)
-				.ok_or(Error::<T>::ArgumentsError)?;
+				.ok_or(Error::<T>::NotSupportTokenType)?;
 
 		<T as lend_market::Config>::Assets::mint_into(asset_id, &who, reduce_amount)?;
 
@@ -208,6 +225,7 @@ impl<T: Config> Pallet<T> {
 			asset_id,
 			&who,
 			reduce_amount,
+			Preservation::Protect,
 			Precision::Exact,
 			Fortitude::Force,
 		)?;
@@ -234,6 +252,7 @@ impl<T: Config> Pallet<T> {
 			asset_id,
 			&who,
 			increase_amount,
+			Preservation::Protect,
 			Precision::Exact,
 			Fortitude::Force,
 		)?;
@@ -247,7 +266,7 @@ impl<T: Config> Pallet<T> {
 		if !AccountDeposits::<T>::contains_key(asset_id, supplier) {
 			return Ok(BalanceOf::<T>::zero());
 		}
-		let deposits = lend_market::Pallet::<T>::account_deposits(asset_id, supplier);
+		let deposits = AccountDeposits::<T>::get(asset_id, supplier);
 		if deposits.voucher_balance.is_zero() {
 			return Ok(BalanceOf::<T>::zero());
 		}

@@ -25,7 +25,7 @@ use crate::{
 	},
 	BNC, *,
 };
-use bifrost_parachain_staking::RoundInfo;
+use bifrost_parachain_staking::{Round, RoundInfo};
 use bifrost_primitives::VBNC;
 use frame_support::{assert_noop, assert_ok, PalletId};
 use parity_scale_codec::alloc::collections::BTreeMap;
@@ -279,7 +279,7 @@ fn parachain_staking_bond_to_liquidize_works() {
 			TimeUnit::Round(48)
 		));
 		bifrost_parachain_staking::Round::<Runtime>::set(RoundInfo::new(10000000, 0, 1));
-		assert_eq!(ParachainStaking::round(), RoundInfo::new(10000000, 0, 1));
+		assert_eq!(Round::<Runtime>::get(), RoundInfo::new(10000000, 0, 1));
 		assert_ok!(VtokenMinting::update_ongoing_time_unit(BNC, TimeUnit::Round(1000)));
 
 		// let delegation_scheduled_requests = ParachainStaking::delegation_scheduled_requests(BOB);
@@ -846,97 +846,6 @@ fn parachain_staking_transfer_to_works() {
 }
 
 #[test]
-fn supplement_fee_account_whitelist_works() {
-	let subaccount_0_location = MultiLocation {
-		parents: 0,
-		interior: X1(AccountId32 { network: None, id: CHARLIE.into() }),
-	};
-
-	ExtBuilder::default().build().execute_with(|| {
-		// environment setup
-		parachain_staking_setup();
-		let entrance_account_id: AccountId = PalletId(*b"bf/vtkin").into_account_truncating();
-		let entrance_account_id_32: [u8; 32] = PalletId(*b"bf/vtkin").into_account_truncating();
-
-		let entrance_account_location = MultiLocation {
-			parents: 0,
-			interior: X1(AccountId32 { network: None, id: entrance_account_id_32 }),
-		};
-		let exit_account_id_32: [u8; 32] = PalletId(*b"bf/vtout").into_account_truncating();
-		let exit_account_location = MultiLocation {
-			parents: 0,
-			interior: X1(AccountId32 { network: None, id: exit_account_id_32 }),
-		};
-
-		let source_account_id_32: [u8; 32] = ALICE.into();
-		let source_location = Slp::account_32_to_local_location(source_account_id_32).unwrap();
-		assert_ok!(Slp::set_fee_source(
-			RuntimeOrigin::signed(ALICE),
-			BNC,
-			Some((source_location, 1_000_000_000_000))
-		));
-
-		// Dest should be one of delegators, operateRuntimeOrigins or accounts in the whitelist.
-		assert_noop!(
-			Slp::supplement_fee_reserve(
-				RuntimeOrigin::signed(ALICE),
-				BNC,
-				Box::new(subaccount_0_location),
-			),
-			Error::<Runtime>::DestAccountNotValid
-		);
-
-		assert_noop!(
-			Slp::supplement_fee_reserve(
-				RuntimeOrigin::signed(ALICE),
-				BNC,
-				Box::new(entrance_account_location),
-			),
-			Error::<Runtime>::DestAccountNotValid
-		);
-
-		// register entrance_account_location as operateRuntimeOrigin
-		assert_ok!(Slp::set_operate_origin(
-			RuntimeOrigin::signed(ALICE),
-			BNC,
-			Some(entrance_account_id)
-		));
-
-		assert_noop!(
-			Slp::supplement_fee_reserve(
-				RuntimeOrigin::signed(ALICE),
-				BNC,
-				Box::new(exit_account_location),
-			),
-			Error::<Runtime>::DestAccountNotValid
-		);
-
-		// register exit_account_location into whitelist
-		assert_ok!(Slp::add_supplement_fee_account_to_whitelist(
-			RuntimeOrigin::signed(ALICE),
-			BNC,
-			Box::new(exit_account_location),
-		));
-
-		// remove exit_account_location from whitelist
-		assert_ok!(Slp::remove_supplement_fee_account_from_whitelist(
-			RuntimeOrigin::signed(ALICE),
-			BNC,
-			Box::new(exit_account_location),
-		));
-
-		assert_noop!(
-			Slp::supplement_fee_reserve(
-				RuntimeOrigin::signed(ALICE),
-				BNC,
-				Box::new(exit_account_location),
-			),
-			Error::<Runtime>::DestAccountNotValid
-		);
-	});
-}
-
-#[test]
 fn add_validator_and_remove_validator_works() {
 	let validator_0_location =
 		MultiLocation { parents: 0, interior: X1(AccountId32 { network: None, id: BOB.into() }) };
@@ -976,7 +885,7 @@ fn add_validator_and_remove_validator_works() {
 		valis.push(validator_0_location);
 
 		let bounded_valis = BoundedVec::try_from(valis).unwrap();
-		assert_eq!(Slp::get_validators(BNC), Some(bounded_valis));
+		assert_eq!(Validators::<Runtime>::get(BNC), Some(bounded_valis));
 
 		assert_ok!(Slp::remove_validator(
 			RuntimeOrigin::signed(ALICE),
@@ -985,7 +894,7 @@ fn add_validator_and_remove_validator_works() {
 		));
 
 		let empty_bounded_vec = BoundedVec::default();
-		assert_eq!(Slp::get_validators(BNC), Some(empty_bounded_vec));
+		assert_eq!(Validators::<Runtime>::get(BNC), Some(empty_bounded_vec));
 	});
 }
 

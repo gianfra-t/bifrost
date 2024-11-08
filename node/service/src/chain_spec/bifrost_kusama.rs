@@ -16,12 +16,15 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+use crate::chain_spec::{get_account_id_from_seed, get_from_seed, RelayExtensions};
 use bifrost_kusama_runtime::{
-	constants::currency::DOLLARS, AccountId, Balance, BalancesConfig, BlockNumber,
-	DefaultBlocksPerRound, InflationInfo, Range, RuntimeGenesisConfig, SS58Prefix, VestingConfig,
+	constants::currency::DOLLARS, AccountId, Balance, BalancesConfig, BlockNumber, InflationInfo,
+	Range, SS58Prefix, VestingConfig,
 };
-use bifrost_primitives::{CurrencyId, CurrencyId::*, TokenInfo, TokenSymbol::*};
-use bifrost_runtime_common::AuraId;
+use bifrost_primitives::{
+	BifrostKusamaChainId, CurrencyId, CurrencyId::*, TokenInfo, TokenSymbol::*,
+};
+use bifrost_runtime_common::{constants::time::HOURS, AuraId};
 use cumulus_primitives_core::ParaId;
 use frame_benchmarking::{account, whitelisted_caller};
 use hex_literal::hex;
@@ -30,26 +33,26 @@ use sc_service::ChainType;
 use serde::de::DeserializeOwned;
 use serde_json as json;
 use sp_core::{crypto::UncheckedInto, sr25519};
-use sp_runtime::{traits::Zero, Perbill};
+use sp_runtime::{traits::Zero, Perbill, Percent};
 use std::{
 	collections::BTreeMap,
 	fs::{read_dir, File},
 	path::PathBuf,
 };
 
-use crate::chain_spec::{get_account_id_from_seed, get_from_seed, RelayExtensions};
-
 const DEFAULT_PROTOCOL_ID: &str = "bifrost";
 
 /// Specialized `ChainSpec` for the bifrost runtime.
-pub type ChainSpec = sc_service::GenericChainSpec<RuntimeGenesisConfig, RelayExtensions>;
+pub type ChainSpec = sc_service::GenericChainSpec<RelayExtensions>;
 
 #[allow(non_snake_case)]
 pub fn ENDOWMENT() -> u128 {
 	1_000_000 * DOLLARS
 }
 
-pub const PARA_ID: u32 = 2001;
+const COLLATOR_COMMISSION: Perbill = Perbill::from_percent(10);
+const PARACHAIN_BOND_RESERVE_PERCENT: Percent = Percent::from_percent(0);
+const BLOCKS_PER_ROUND: u32 = 2 * HOURS;
 
 pub fn inflation_config() -> InflationInfo<Balance> {
 	fn to_round_inflation(annual: Range<Perbill>) -> Range<Perbill> {
@@ -59,7 +62,7 @@ pub fn inflation_config() -> InflationInfo<Balance> {
 		perbill_annual_to_perbill_round(
 			annual,
 			// rounds per year
-			BLOCKS_PER_YEAR / DefaultBlocksPerRound::get(),
+			BLOCKS_PER_YEAR / BLOCKS_PER_ROUND,
 		)
 	}
 	let annual = Range {
@@ -172,6 +175,9 @@ pub fn bifrost_genesis(
 				.collect::<Vec<_>>(),
 			"delegations": delegations,
 			"inflationConfig": inflation_config(),
+			"collatorCommission": COLLATOR_COMMISSION,
+			"parachainBondReservePercent": PARACHAIN_BOND_RESERVE_PERCENT,
+			"blocksPerRound": BLOCKS_PER_ROUND,
 		},
 	})
 }
@@ -219,7 +225,11 @@ pub fn local_testnet_config() -> ChainSpec {
 
 	ChainSpec::builder(
 		bifrost_kusama_runtime::WASM_BINARY.expect("WASM binary was not built, please build it!"),
-		RelayExtensions { relay_chain: "kusama-local".into(), para_id: PARA_ID },
+		RelayExtensions {
+			relay_chain: "kusama-local".into(),
+			para_id: BifrostKusamaChainId::get(),
+			evm_since: 1,
+		},
 	)
 	.with_name("Bifrost Local Testnet")
 	.with_id("bifrost_local_testnet")
@@ -240,7 +250,7 @@ pub fn local_testnet_config() -> ChainSpec {
 		vec![],
 		balances,
 		vestings,
-		PARA_ID.into(),
+		BifrostKusamaChainId::get().into(),
 		council_membership,
 		technical_committee_membership,
 		salp_multisig,
@@ -325,7 +335,11 @@ pub fn chainspec_config() -> ChainSpec {
 
 	ChainSpec::builder(
 		bifrost_kusama_runtime::WASM_BINARY.expect("WASM binary was not built, please build it!"),
-		RelayExtensions { relay_chain: "kusama".into(), para_id: PARA_ID },
+		RelayExtensions {
+			relay_chain: "kusama".into(),
+			para_id: BifrostKusamaChainId::get(),
+			evm_since: 1,
+		},
 	)
 	.with_name("Bifrost")
 	.with_id("bifrost")
@@ -335,7 +349,7 @@ pub fn chainspec_config() -> ChainSpec {
 		vec![],
 		balances,
 		vesting_configs.into_iter().flat_map(|vc| vc.vesting).collect(),
-		PARA_ID.into(),
+		BifrostKusamaChainId::get().into(),
 		vec![], // council membership
 		vec![], // technical committee membership
 		salp_multisig,

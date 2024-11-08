@@ -30,7 +30,7 @@ check-all: format
 	SKIP_WASM_BUILD= cargo check -p bifrost-cli --locked --features "with-all-runtime,runtime-benchmarks,try-runtime"
 
 .PHONY: test-all # cargo test all
-test-all: test-runtimes test-benchmarks
+test-all: test-runtimes test-benchmarks test-vtoken-voting-kusama
 
 .PHONY: test-runtimes
 test-runtimes:
@@ -38,7 +38,10 @@ test-runtimes:
 
 .PHONY: test-benchmarks
 test-benchmarks:
-	SKIP_WASM_BUILD= cargo test benchmarking  --features="runtime-benchmarks, polkadot"
+	SKIP_WASM_BUILD= cargo test benchmarking  --features="with-bifrost-runtime, runtime-benchmarks, polkadot"
+
+test-vtoken-voting-kusama:
+	SKIP_WASM_BUILD= cargo test -p bifrost-vtoken-voting --features="kusama, runtime-benchmarks"
 
 .PHONY: clean # cargo clean
 clean:
@@ -59,7 +62,7 @@ format-check:
 
 .PHONY: clippy # cargo clippy
 clippy: format-check
-	SKIP_WASM_BUILD= cargo clippy --all --all-targets --features=with-all-runtime -- -D warnings
+	cargo clippy --all --all-targets --features "with-all-runtime,runtime-benchmarks,try-runtime" -- -D warnings
 
 .PHONY: benchmarking-staking # benchmarking staking pallet
 benchmarking-staking:
@@ -142,6 +145,7 @@ try-polkadot-runtime-upgrade-snap:build-try-runtime
 			target/release/wbuild/bifrost-polkadot-runtime/bifrost_polkadot_runtime.compact.compressed.wasm \
 		on-runtime-upgrade \
 		--disable-idempotency-checks \
+		--checks=all \
 		snap -p bifrost_polkadot@latest.snap
 
 .PHONY: try-kusama-runtime-create-snap # create kusama runtime snapshot
@@ -155,6 +159,7 @@ try-kusama-runtime-upgrade-snap:build-try-runtime
 			target/release/wbuild/bifrost-kusama-runtime/bifrost_kusama_runtime.compact.compressed.wasm \
 		on-runtime-upgrade \
 		--disable-idempotency-checks \
+		--checks=all \
 		snap -p bifrost@latest.snap
 
 .PHONY: resources # export genesis resources

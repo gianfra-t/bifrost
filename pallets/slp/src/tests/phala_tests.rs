@@ -28,6 +28,7 @@ use crate::{
 use bifrost_primitives::currency::{PHA, VPHA};
 use frame_support::{assert_noop, assert_ok, PalletId};
 use polkadot_parachain_primitives::primitives::Sibling;
+use sp_core::crypto::Ss58Codec;
 use sp_runtime::traits::AccountIdConversion;
 
 // parents 0 means vault, parents 1 means stake_pool
@@ -1290,123 +1291,6 @@ fn phala_transfer_to_works() {
 }
 
 #[test]
-fn supplement_fee_account_whitelist_works() {
-	let bifrost_parachain_account_id: AccountId = Sibling::from(2001).into_account_truncating();
-	// subaccount_id_0: 41YcGwBLwxbFV7VfbF6zYGgUnYbt96dHcA2DWruRJkWtANFD
-	let subaccount_0_account_id_32: [u8; 32] =
-		Utility::derivative_account_id(bifrost_parachain_account_id, 0).into();
-
-	let subaccount_0_location = MultiLocation {
-		parents: 1,
-		interior: X2(
-			Parachain(2004),
-			AccountId32 { network: None, id: subaccount_0_account_id_32.into() },
-		),
-	};
-
-	ExtBuilder::default().build().execute_with(|| {
-		// environment setup
-		phala_setup();
-		let entrance_account_id: AccountId = PalletId(*b"bf/vtkin").into_account_truncating();
-		let entrance_account_id_32: [u8; 32] = PalletId(*b"bf/vtkin").into_account_truncating();
-		let entrance_account_location = MultiLocation {
-			parents: 0,
-			interior: X1(AccountId32 { network: None, id: entrance_account_id_32 }),
-		};
-
-		let exit_account_id_32: [u8; 32] = PalletId(*b"bf/vtout").into_account_truncating();
-		let exit_account_location = MultiLocation {
-			parents: 0,
-			interior: X1(AccountId32 { network: None, id: exit_account_id_32 }),
-		};
-
-		let source_account_id_32: [u8; 32] = ALICE.into();
-		let source_location = Slp::account_32_to_local_location(source_account_id_32).unwrap();
-		assert_ok!(Slp::set_fee_source(
-			RuntimeOrigin::signed(ALICE),
-			PHA,
-			Some((source_location, 1_000_000_000_000_000_000))
-		));
-
-		// Dest should be one of delegators, operateOrigins or accounts in the whitelist.
-		assert_noop!(
-			Slp::supplement_fee_reserve(
-				RuntimeOrigin::signed(ALICE),
-				PHA,
-				Box::new(subaccount_0_location),
-			),
-			Error::<Runtime>::TransferToError
-		);
-
-		assert_noop!(
-			Slp::supplement_fee_reserve(
-				RuntimeOrigin::signed(ALICE),
-				PHA,
-				Box::new(entrance_account_location),
-			),
-			Error::<Runtime>::DestAccountNotValid
-		);
-
-		// register entrance_account_location as operateOrigin
-		assert_ok!(Slp::set_operate_origin(
-			RuntimeOrigin::signed(ALICE),
-			PHA,
-			Some(entrance_account_id)
-		));
-
-		assert_noop!(
-			Slp::supplement_fee_reserve(
-				RuntimeOrigin::signed(ALICE),
-				PHA,
-				Box::new(entrance_account_location),
-			),
-			Error::<Runtime>::TransferToError
-		);
-
-		assert_noop!(
-			Slp::supplement_fee_reserve(
-				RuntimeOrigin::signed(ALICE),
-				PHA,
-				Box::new(exit_account_location),
-			),
-			Error::<Runtime>::DestAccountNotValid
-		);
-
-		// register exit_account_location into whitelist
-		assert_ok!(Slp::add_supplement_fee_account_to_whitelist(
-			RuntimeOrigin::signed(ALICE),
-			PHA,
-			Box::new(exit_account_location),
-		));
-
-		assert_noop!(
-			Slp::supplement_fee_reserve(
-				RuntimeOrigin::signed(ALICE),
-				PHA,
-				Box::new(exit_account_location),
-			),
-			Error::<Runtime>::TransferToError
-		);
-
-		// remove exit_account_location from whitelist
-		assert_ok!(Slp::remove_supplement_fee_account_from_whitelist(
-			RuntimeOrigin::signed(ALICE),
-			PHA,
-			Box::new(exit_account_location),
-		));
-
-		assert_noop!(
-			Slp::supplement_fee_reserve(
-				RuntimeOrigin::signed(ALICE),
-				PHA,
-				Box::new(exit_account_location),
-			),
-			Error::<Runtime>::DestAccountNotValid
-		);
-	});
-}
-
-#[test]
 fn charge_host_fee_and_tune_vtoken_exchange_rate_works() {
 	let bifrost_parachain_account_id: AccountId = Sibling::from(2001).into_account_truncating();
 	// subaccount_id_0: 41YcGwBLwxbFV7VfbF6zYGgUnYbt96dHcA2DWruRJkWtANFD
@@ -1525,7 +1409,7 @@ fn add_validator_and_remove_validator_works() {
 		valis.push(VALIDATOR_0_LOCATION);
 
 		let bounded_valis = BoundedVec::try_from(valis).unwrap();
-		assert_eq!(Slp::get_validators(PHA), Some(bounded_valis));
+		assert_eq!(Validators::<Runtime>::get(PHA), Some(bounded_valis));
 
 		assert_ok!(Slp::delegate(
 			RuntimeOrigin::signed(ALICE),
@@ -1542,7 +1426,7 @@ fn add_validator_and_remove_validator_works() {
 		));
 
 		let empty_bounded_vec = BoundedVec::default();
-		assert_eq!(Slp::get_validators(PHA), Some(empty_bounded_vec));
+		assert_eq!(Validators::<Runtime>::get(PHA), Some(empty_bounded_vec));
 	});
 }
 
@@ -1576,4 +1460,40 @@ fn phala_convert_asset_works() {
 			Error::<Runtime>::XcmFailure
 		);
 	});
+}
+
+#[test]
+fn generate_derivative_account() {
+	ExtBuilder::default().build().execute_with(|| {
+		// PublicKey: 0x70617261d1070000000000000000000000000000000000000000000000000000
+		// AccountId(42): 5Ec4AhPV91i9yNuiWuNunPf6AQCYDhFTTA4G5QCbtqYApH9E
+		let sovereign_account = <ParaId as AccountIdConversion<AccountId>>::into_account_truncating(
+			&ParaId::from(2001),
+		);
+		println!("sovereign_account: {:?}", sovereign_account);
+		// PublicKey: 0x5a53736d8e96f1c007cf0d630acf5209b20611617af23ce924c8e25328eb5d28
+		// AccountId(42): 5E78xTBiaN3nAGYtcNnqTJQJqYAkSDGggKqaDfpNsKyPpbcb
+		let sovereign_account_derivative_0 =
+			Utility::derivative_account_id(sovereign_account.clone(), 0);
+		assert_eq!(
+			sovereign_account_derivative_0,
+			AccountId::from_ss58check("5E78xTBiaN3nAGYtcNnqTJQJqYAkSDGggKqaDfpNsKyPpbcb").unwrap()
+		);
+		// PublicKey: 0xf1c5ca0368e7a567945a59aaea92b9be1e0794fe5e077d017462b7ce8fc1ed7c
+		// AccountId(42): 5HXi9pzWnTQzk7VKzY6VQn92KfWCcA5NbSm53uKHrYU1VsjP
+		let sovereign_account_derivative_1 =
+			Utility::derivative_account_id(sovereign_account.clone(), 1);
+		assert_eq!(
+			sovereign_account_derivative_1,
+			AccountId::from_ss58check("5HXi9pzWnTQzk7VKzY6VQn92KfWCcA5NbSm53uKHrYU1VsjP").unwrap()
+		);
+		// PublicKey: 0x1e365411cfd0b0f78466be433a2ec5f7d545c5e28cb2e9a31ce97d4a28447dfc
+		// AccountId(42): 5CkKS3YMx64TguUYrMERc5Bn6Mn2aKMUkcozUFREQDgHS3Tv
+		let sovereign_account_derivative_2 =
+			Utility::derivative_account_id(sovereign_account.clone(), 2);
+		assert_eq!(
+			sovereign_account_derivative_2,
+			AccountId::from_ss58check("5CkKS3YMx64TguUYrMERc5Bn6Mn2aKMUkcozUFREQDgHS3Tv").unwrap()
+		);
+	})
 }

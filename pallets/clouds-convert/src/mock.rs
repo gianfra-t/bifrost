@@ -24,9 +24,9 @@
 use bifrost_asset_registry::AssetIdMaps;
 use bifrost_primitives::{
 	currency::{BNC, CLOUD, KSM, VBNC, VKSM},
-	CurrencyId, CurrencyIdMapping, TokenSymbol,
+	BuyBackAccount, CloudsPalletId, CurrencyId, CurrencyIdMapping, IncentivePalletId,
 };
-use frame_support::{ord_parameter_types, parameter_types, traits::Nothing, PalletId};
+use frame_support::{ord_parameter_types, parameter_types, traits::Nothing};
 use frame_system::EnsureSignedBy;
 use sp_core::H256;
 use sp_runtime::{
@@ -53,7 +53,7 @@ frame_support::construct_runtime!(
 		Currencies: bifrost_currencies,
 		AssetRegistry: bifrost_asset_registry,
 		CloudsConvert: bifrost_clouds_convert,
-		VeMinting: bifrost_ve_minting,
+		BbBNC: bb_bnc,
 	}
 );
 
@@ -87,10 +87,15 @@ impl frame_system::Config for Runtime {
 	type Version = ();
 	type MaxConsumers = frame_support::traits::ConstU32<16>;
 	type RuntimeTask = ();
+	type SingleBlockMigrations = ();
+	type MultiBlockMigrator = ();
+	type PreInherents = ();
+	type PostInherents = ();
+	type PostTransactions = ();
 }
 
 parameter_types! {
-	pub const NativeCurrencyId: CurrencyId = CurrencyId::Native(TokenSymbol::BNC);
+	pub const NativeCurrencyId: CurrencyId = BNC;
 }
 
 pub type AdaptedBasicCurrency =
@@ -161,23 +166,17 @@ impl bifrost_asset_registry::Config for Runtime {
 	type WeightInfo = ();
 }
 
-parameter_types! {
-	pub const CloudsPalletId: PalletId = PalletId(*b"bf/cloud");
-}
-
 impl bifrost_clouds_convert::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type MultiCurrency = Currencies;
 	type CloudsPalletId = CloudsPalletId;
-	type VeMinting = VeMinting;
+	type BbBNC = BbBNC;
 	type WeightInfo = ();
 	type LockedBlocks = MaxBlock;
 }
 
 parameter_types! {
-	pub const VeMintingTokenType: CurrencyId = CurrencyId::VToken(TokenSymbol::BNC);
-	pub VeMintingPalletId: PalletId = PalletId(*b"bf/vemnt");
-	pub IncentivePalletId: PalletId = PalletId(*b"bf/veict");
+	pub const BbBNCTokenType: CurrencyId = VBNC;
 	pub const Week: BlockNumber = 50400; // a week
 	pub const MaxBlock: BlockNumber = 10512000; // four years
 	pub const Multiplier: Balance = 10_u128.pow(12);
@@ -186,13 +185,13 @@ parameter_types! {
 	pub const MarkupRefreshLimit: u32 = 100;
 }
 
-impl bifrost_ve_minting::Config for Runtime {
+impl bb_bnc::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type MultiCurrency = Currencies;
 	type ControlOrigin = EnsureSignedBy<One, AccountId>;
-	type TokenType = VeMintingTokenType;
-	type VeMintingPalletId = VeMintingPalletId;
+	type TokenType = BbBNCTokenType;
 	type IncentivePalletId = IncentivePalletId;
+	type BuyBackAccount = BuyBackAccount;
 	type WeightInfo = ();
 	type BlockNumberToBalance = ConvertInto;
 	type Week = Week;

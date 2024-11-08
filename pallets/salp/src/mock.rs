@@ -20,20 +20,23 @@
 
 #![cfg(test)]
 
-use crate::*;
 use bifrost_asset_registry::AssetIdMaps;
 use bifrost_primitives::{
-	Amount, Balance, CurrencyId, CurrencyId::*, DoNothingExecuteXcm, MessageId, ParaId,
-	SlpOperator, SlpxOperator, TokenSymbol, TokenSymbol::*, VKSM,
+	Amount, Balance, BifrostCrowdloanId, BifrostEntranceAccount, BifrostExitAccount,
+	BuybackPalletId,
+	CurrencyId::{self, *},
+	IncentivePoolAccount, MessageId, MockXcmExecutor, ParaId, SlpOperator, SlpxOperator,
+	StableAssetPalletId,
+	TokenSymbol::{self, *},
+	ZenlinkPalletId, ASG, KSM, KUSD, VKSM,
 };
 use bifrost_xcm_interface::traits::XcmHelper;
 use cumulus_primitives_core::ParaId as Pid;
 use frame_support::{
 	construct_runtime, derive_impl, ord_parameter_types, parameter_types,
 	sp_runtime::{DispatchError, DispatchResult, SaturatedConversion},
-	traits::{ConstU128, ConstU64, EnsureOrigin, Everything, Get, Nothing},
+	traits::{ConstU128, ConstU64, EnsureOrigin, Everything, Get, LockIdentifier, Nothing},
 	weights::Weight,
-	PalletId,
 };
 use frame_system::{EnsureRoot, EnsureSignedBy, RawOrigin};
 use orml_traits::{location::RelativeReserveProvider, parameter_type_with_key, MultiCurrency};
@@ -53,6 +56,7 @@ use zenlink_protocol::{
 };
 
 use crate as salp;
+use bifrost_primitives::MoonbeamChainId;
 
 pub(crate) type AccountId = <<Signature as sp_runtime::traits::Verify>::Signer as sp_runtime::traits::IdentifyAccount>::AccountId;
 pub(crate) type Block = frame_system::mocking::MockBlock<Test>;
@@ -80,9 +84,9 @@ construct_runtime!(
 );
 
 parameter_types! {
-	pub const NativeCurrencyId: CurrencyId = CurrencyId::Native(TokenSymbol::ASG);
-	pub const RelayCurrencyId: CurrencyId = CurrencyId::Token(TokenSymbol::KSM);
-	pub const StableCurrencyId: CurrencyId = CurrencyId::Stable(TokenSymbol::KUSD);
+	pub const NativeCurrencyId: CurrencyId = ASG;
+	pub const RelayCurrencyId: CurrencyId = KSM;
+	pub const StableCurrencyId: CurrencyId = KUSD;
 }
 
 parameter_types! {
@@ -177,7 +181,6 @@ impl bifrost_currencies::Config for Test {
 }
 
 parameter_types! {
-	pub const ZenlinkPalletId: PalletId = PalletId(*b"/zenlink");
 	pub const GetExchangeFee: (u32, u32) = (3, 1000);   // 0.3%
 	pub const SelfParaId: u32 = 2001;
 }
@@ -268,7 +271,6 @@ pub const TREASURY_ACCOUNT: AccountId = AccountId::new([9u8; 32]);
 
 parameter_types! {
 	pub const MinContribution: Balance = 10;
-	pub const BifrostCrowdloanId: PalletId = PalletId(*b"bf/salp#");
 	pub const RemoveKeysLimit: u32 = 50;
 	pub const SlotLength: BlockNumber = 8u32 as BlockNumber;
 	pub const LeasePeriod: BlockNumber = 6 * WEEKS;
@@ -281,7 +283,6 @@ parameter_types! {
 		CATHI
 	],2);
 	pub const TreasuryAccount: AccountId = TREASURY_ACCOUNT;
-	pub const BuybackPalletId: PalletId = PalletId(*b"bf/salpc");
 	pub const BatchLimit: u32 = 50;
 }
 
@@ -307,9 +308,9 @@ impl EnsureOrigin<RuntimeOrigin> for EnsureConfirmAsGovernance {
 pub(crate) static mut MOCK_XCM_RESULT: (bool, bool) = (true, true);
 
 // Mock XcmExecutor
-pub struct MockXcmExecutor;
+pub struct MockSalpXcmExecutor;
 
-impl XcmHelper<crate::AccountIdOf<Test>, crate::BalanceOf<Test>> for MockXcmExecutor {
+impl XcmHelper<crate::AccountIdOf<Test>, crate::BalanceOf<Test>> for MockSalpXcmExecutor {
 	fn contribute(
 		_contributer: AccountId,
 		_index: ParaId,
@@ -329,9 +330,6 @@ impl bifrost_stable_asset::traits::ValidateAssetId<CurrencyId> for EnsurePoolAss
 	fn validate(_: CurrencyId) -> bool {
 		true
 	}
-}
-parameter_types! {
-	pub const StableAssetPalletId: PalletId = PalletId(*b"nuts/sta");
 }
 
 impl bifrost_stable_asset::Config for Test {
@@ -364,9 +362,6 @@ impl bifrost_stable_pool::Config for Test {
 parameter_types! {
 	pub const MaximumUnlockIdOfUser: u32 = 1_000;
 	pub const MaximumUnlockIdOfTimeUnit: u32 = 1_000;
-	pub BifrostEntranceAccount: PalletId = PalletId(*b"bf/vtkin");
-	pub BifrostExitAccount: PalletId = PalletId(*b"bf/vtout");
-	pub IncentivePoolAccount: PalletId = PalletId(*b"bf/inpoo");
 }
 
 pub struct SlpxInterface;
@@ -424,24 +419,16 @@ impl bifrost_vtoken_minting::Config for Test {
 	type ExitAccount = BifrostExitAccount;
 	type FeeAccount = CouncilAccount;
 	type RedeemFeeAccount = CouncilAccount;
-	type BifrostSlp = Slp;
 	type RelayChainToken = RelayCurrencyId;
-	type CurrencyIdConversion = AssetIdMaps<Test>;
-	type CurrencyIdRegister = AssetIdMaps<Test>;
 	type WeightInfo = ();
 	type OnRedeemSuccess = ();
 	type XcmTransfer = XTokens;
-	type AstarParachainId = ConstU32<2007>;
-	type MoonbeamParachainId = ConstU32<2023>;
+	type MoonbeamChainId = MoonbeamChainId;
 	type BifrostSlpx = SlpxInterface;
-	type HydradxParachainId = ConstU32<2034>;
-	type MantaParachainId = ConstU32<2104>;
-	type InterlayParachainId = ConstU32<2032>;
 	type ChannelCommission = ();
 	type MaxLockRecords = ConstU32<100>;
 	type IncentivePoolAccount = IncentivePoolAccount;
-	type VeMinting = ();
-	type AssetIdMaps = AssetIdMaps<Test>;
+	type BbBNC = ();
 }
 
 parameter_types! {
@@ -449,7 +436,6 @@ parameter_types! {
 }
 
 impl salp::Config for Test {
-	type BancorPool = ();
 	type RuntimeEvent = RuntimeEvent;
 	type RuntimeCall = RuntimeCall;
 	type RuntimeOrigin = RuntimeOrigin;
@@ -465,17 +451,13 @@ impl salp::Config for Test {
 	type VSBondValidPeriod = VSBondValidPeriod;
 	type EnsureConfirmAsGovernance = EnsureConfirmAsGovernance;
 	type WeightInfo = ();
-	type XcmInterface = MockXcmExecutor;
+	type XcmInterface = MockSalpXcmExecutor;
 	type TreasuryAccount = TreasuryAccount;
 	type BuybackPalletId = BuybackPalletId;
-	type DexOperator = ZenlinkProtocol;
 	type CurrencyIdConversion = AssetIdMaps<Test>;
 	type CurrencyIdRegister = AssetIdMaps<Test>;
-	type ParachainId = ParaInfo;
 	type StablePool = StablePool;
 	type VtokenMinting = VtokenMinting;
-	type LockId = SalpLockId;
-	type BatchLimit = BatchLimit;
 }
 
 parameter_types! {
@@ -513,6 +495,10 @@ impl xcm_executor::Config for XcmConfig {
 	type AssetExchanger = ();
 	type Aliasers = Nothing;
 	type TransactionalProcessor = FrameTransactionalProcessor;
+	type HrmpNewChannelOpenRequestHandler = ();
+	type HrmpChannelAcceptedHandler = ();
+	type HrmpChannelClosingHandler = ();
+	type XcmRecorder = ();
 }
 
 #[cfg(feature = "runtime-benchmarks")]
@@ -560,7 +546,7 @@ impl bifrost_xcm_interface::Config for Test {
 	type RelayNetwork = RelayNetwork;
 	type RelaychainCurrencyId = RelayCurrencyId;
 	type ParachainSovereignAccount = TreasuryAccount;
-	type XcmExecutor = DoNothingExecuteXcm;
+	type XcmExecutor = MockXcmExecutor;
 	type AccountIdToLocation = BifrostAccountIdToMultiLocation;
 	type SalpHelper = Salp;
 	type ParachainId = ParaInfo;
@@ -581,8 +567,8 @@ pub(crate) fn new_test_ext() -> sp_io::TestExternalities {
 
 	let currency = vec![
 		(Native(BNC), DOLLARS / 100, None),
-		(Stable(KUSD), DOLLARS / 10_000, None),
-		(Token(KSM), DOLLARS / 10_000, None),
+		(Stable(TokenSymbol::KUSD), DOLLARS / 10_000, None),
+		(Token(TokenSymbol::KSM), DOLLARS / 10_000, None),
 		(Token(ZLK), DOLLARS / 1000_000, None),
 		(Token(KAR), DOLLARS / 10_000, None),
 		(Token(RMRK), DOLLARS / 1000_000, None),
@@ -590,7 +576,7 @@ pub(crate) fn new_test_ext() -> sp_io::TestExternalities {
 		(Token(MOVR), DOLLARS / 1000_000, None),
 		(Token(DOT), DOLLARS / 1000_000, None),
 	];
-	let vcurrency = vec![Native(BNC), Token(KSM), Token(MOVR)];
+	let vcurrency = vec![Native(BNC), Token(TokenSymbol::KSM), Token(MOVR)];
 	let vsbond = vec![];
 	bifrost_asset_registry::GenesisConfig::<Test> {
 		currency,

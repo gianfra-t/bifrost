@@ -46,9 +46,11 @@ pallet-proxy = { workspace = true }
 pallet-ranked-collective = { workspace = true }
 pallet-referenda = { workspace = true }
 pallet-scheduler = { workspace = true }
+pallet-staking = { workspace = true }
 pallet-session = { workspace = true }
 pallet-timestamp = { workspace = true }
 pallet-tips = { workspace = true }
+pallet-tx-pause = { workspace = true }
 pallet-transaction-payment = { workspace = true }
 pallet-transaction-payment-rpc-runtime-api = { workspace = true }
 pallet-treasury = { workspace = true }
@@ -72,7 +74,6 @@ sp-genesis-builder = { workspace = true }
 
 # Cumulus dependencies
 cumulus-pallet-aura-ext = { workspace = true }
-cumulus-pallet-dmp-queue = { workspace = true }
 cumulus-pallet-parachain-system = { workspace = true }
 cumulus-pallet-xcm = { workspace = true }
 cumulus-pallet-xcmp-queue = { workspace = true }
@@ -90,6 +91,7 @@ polkadot-runtime-common = { workspace = true }
 xcm = { workspace = true }
 xcm-builder = { workspace = true }
 xcm-executor = { workspace = true }
+xcm-fee-payment-runtime-api = { workspace = true }
 
 # orml
 orml-tokens = { workspace = true }
@@ -108,10 +110,34 @@ zenlink-protocol-runtime-api = { workspace = true }
 # Nuts Finance
 bifrost-stable-asset = { workspace = true }
 
+# Frontier
+num_enum = { workspace = true }
+primitive-types = { workspace = true }
+ethabi = { workspace = true }
+module-evm-utility-macro = { workspace = true }
+evm = { workspace = true, features = ["with-codec"] }
+fp-account = { workspace = true, features = ["serde"] }
+fp-evm = { workspace = true, features = ["serde"] }
+fp-rpc = { workspace = true }
+fp-self-contained = { workspace = true, features = ["serde"] }
+pallet-base-fee = { workspace = true }
+pallet-dynamic-fee = { workspace = true }
+pallet-ethereum = { workspace = true }
+pallet-evm = { workspace = true }
+pallet-evm-chain-id = { workspace = true }
+pallet-evm-precompile-dispatch = { workspace = true }
+pallet-evm-precompile-modexp = { workspace = true }
+pallet-evm-precompile-sha3fips = { workspace = true }
+pallet-evm-precompile-simple = { workspace = true }
+pallet-evm-precompile-bn128 = { workspace = true }
+pallet-evm-precompile-blake2 = { workspace = true }
+pallet-evm-accounts = { workspace = true }
+pallet-evm-accounts-rpc-runtime-api = { workspace = true }
+pallet-traits = { workspace = true }
+
 # Bifrost
 bifrost-asset-registry = { workspace = true }
 bifrost-buy-back = { workspace = true }
-bifrost-call-switchgear = { workspace = true }
 bifrost-cross-in-out = { workspace = true }
 bifrost-currencies = { workspace = true }
 bifrost-farming = { workspace = true }
@@ -124,13 +150,14 @@ bifrost-runtime-common = { workspace = true }
 bifrost-salp = { workspace = true }
 bifrost-salp-rpc-runtime-api = { workspace = true }
 bifrost-slp = { workspace = true }
+bifrost-slp-v2 = { workspace = true, features = ["polkadot"] }
 bifrost-slpx = { workspace = true }
 bifrost-stable-pool = { workspace = true }
 bifrost-stable-pool-rpc-runtime-api = { workspace = true }
 bifrost-system-maker = { workspace = true }
 bifrost-system-staking = { workspace = true }
-bifrost-ve-minting = { workspace = true }
-bifrost-ve-minting-rpc-runtime-api = { workspace = true }
+bb-bnc = { workspace = true }
+bb-bnc-rpc-runtime-api = { workspace = true }
 bifrost-vesting = { workspace = true }
 bifrost-vstoken-conversion = { workspace = true }
 bifrost-vtoken-minting = { workspace = true }
@@ -181,6 +208,7 @@ std = [
 	"pallet-session/std",
 	"pallet-timestamp/std",
 	"pallet-tips/std",
+	"pallet-tx-pause/std",
 	"pallet-transaction-payment-rpc-runtime-api/std",
 	"pallet-transaction-payment/std",
 	"pallet-treasury/std",
@@ -201,7 +229,6 @@ std = [
 	"sp-genesis-builder/std",
 
 	"cumulus-pallet-aura-ext/std",
-	"cumulus-pallet-dmp-queue/std",
 	"cumulus-pallet-parachain-system/std",
 	"cumulus-pallet-xcm/std",
 	"cumulus-pallet-xcmp-queue/std",
@@ -214,6 +241,7 @@ std = [
 	"xcm-builder/std",
 	"xcm-executor/std",
 	"xcm/std",
+	"xcm-fee-payment-runtime-api/std",
 
 	"orml-tokens/std",
 	"orml-traits/std",
@@ -241,13 +269,14 @@ std = [
 	"bifrost-salp-rpc-runtime-api/std",
 	"bifrost-salp/std",
 	"bifrost-slp/std",
+	"bifrost-slp-v2/std",
 	"bifrost-slpx/std",
 	"bifrost-stable-pool-rpc-runtime-api/std",
 	"bifrost-stable-pool/std",
 	"bifrost-system-maker/std",
 	"bifrost-system-staking/std",
-	"bifrost-ve-minting-rpc-runtime-api/std",
-	"bifrost-ve-minting/std",
+	"bb-bnc-rpc-runtime-api/std",
+	"bb-bnc/std",
 	"bifrost-vesting/std",
 	"bifrost-vtoken-minting/std",
 	"bifrost-vtoken-voting/std",
@@ -257,7 +286,27 @@ std = [
 	"leverage-staking/std",
 	"bifrost-xcm-interface/std",
 	"bifrost-channel-commission/std",
+	# Frontier
+	"fp-account/std",
+	"fp-evm/std",
+	"fp-rpc/std",
+	"fp-account/std",
+	"fp-self-contained/std",
+	"pallet-base-fee/std",
+	"pallet-dynamic-fee/std",
+	"pallet-ethereum/std",
+	"pallet-evm/std",
+	"pallet-evm-chain-id/std",
+	"pallet-evm-precompile-dispatch/std",
+	"pallet-evm-precompile-modexp/std",
+	"pallet-evm-precompile-sha3fips/std",
+	"pallet-evm-precompile-simple/std",
+	"pallet-evm-precompile-bn128/std",
+	"pallet-evm-precompile-blake2/std",
+	"pallet-evm-accounts/std",
+	"pallet-evm-accounts-rpc-runtime-api/std",
 	"bifrost-clouds-convert/std",
+
 	"bifrost-vtoken-minting-rpc-runtime-api/std",
 	"bifrost-parachain-staking/std",
 
@@ -278,23 +327,26 @@ runtime-benchmarks = [
 	"pallet-balances/runtime-benchmarks",
 	"pallet-bounties/runtime-benchmarks",
 	"pallet-indices/runtime-benchmarks",
+	"pallet-staking/runtime-benchmarks",
 	"pallet-scheduler/runtime-benchmarks",
 	"pallet-timestamp/runtime-benchmarks",
 	"pallet-treasury/runtime-benchmarks",
 	"pallet-utility/runtime-benchmarks",
+	"pallet-ethereum/runtime-benchmarks",
 	"bifrost-vesting/runtime-benchmarks",
 	"pallet-xcm/runtime-benchmarks",
 	"sp-runtime/runtime-benchmarks",
 	"xcm-builder/runtime-benchmarks",
-	"bifrost-call-switchgear/runtime-benchmarks",
 	"bifrost-slp/runtime-benchmarks",
+	"bifrost-slp-v2/runtime-benchmarks",
 	"bifrost-salp/runtime-benchmarks",
 	"bifrost-vtoken-minting/runtime-benchmarks",
-	"bifrost-ve-minting/runtime-benchmarks",
+	"bb-bnc/runtime-benchmarks",
 	"bifrost-cross-in-out/runtime-benchmarks",
 	"bifrost-slpx/runtime-benchmarks",
 	"bifrost-stable-pool/runtime-benchmarks",
 	"bifrost-vtoken-voting/runtime-benchmarks",
+	"bifrost-xcm-interface/runtime-benchmarks",
 	"sp-api/disable-logging",
 	"lend-market/runtime-benchmarks",
 	"bifrost-channel-commission/runtime-benchmarks",
@@ -306,7 +358,6 @@ runtime-benchmarks = [
 try-runtime = [
 	"bifrost-asset-registry/try-runtime",
 	"bifrost-buy-back/try-runtime",
-	"bifrost-call-switchgear/try-runtime",
 	"bifrost-channel-commission/try-runtime",
 	"bifrost-clouds-convert/try-runtime",
 	"bifrost-cross-in-out/try-runtime",
@@ -316,19 +367,19 @@ try-runtime = [
 	"bifrost-flexible-fee/try-runtime",
 	"bifrost-salp/try-runtime",
 	"bifrost-slp/try-runtime",
+	"bifrost-slp-v2/try-runtime",
 	"bifrost-slpx/try-runtime",
 	"bifrost-stable-asset/try-runtime",
 	"bifrost-stable-pool/try-runtime",
 	"bifrost-system-maker/try-runtime",
 	"bifrost-system-staking/try-runtime",
-	"bifrost-ve-minting/try-runtime",
+	"bb-bnc/try-runtime",
 	"bifrost-vesting/try-runtime",
 	"bifrost-vstoken-conversion/try-runtime",
 	"bifrost-vtoken-minting/try-runtime",
 	"bifrost-vtoken-voting/try-runtime",
 	"bifrost-xcm-interface/try-runtime",
 	"cumulus-pallet-aura-ext/try-runtime",
-	"cumulus-pallet-dmp-queue/try-runtime",
 	"cumulus-pallet-parachain-system/try-runtime",
 	"cumulus-pallet-xcm/try-runtime",
 	"cumulus-pallet-xcmp-queue/try-runtime",
@@ -366,17 +417,24 @@ try-runtime = [
 	"pallet-session/try-runtime",
 	"pallet-timestamp/try-runtime",
 	"pallet-tips/try-runtime",
+	"pallet-tx-pause/try-runtime",
 	"pallet-transaction-payment/try-runtime",
 	"pallet-treasury/try-runtime",
 	"pallet-utility/try-runtime",
 	"pallet-whitelist/try-runtime",
 	"parachain-info/try-runtime",
 	"zenlink-protocol/try-runtime",
+	"fp-self-contained/try-runtime",
+	"pallet-ethereum/try-runtime",
+	"pallet-evm-accounts/try-runtime",
+	"pallet-evm/try-runtime",
+	"pallet-evm-chain-id/try-runtime",
+	"pallet-dynamic-fee/try-runtime",
 	"bifrost-parachain-staking/try-runtime",
 ]
 
 # Enable the metadata hash generation in the wasm builder.
-metadata-hash = ["substrate-wasm-builder/metadata-hash"]
+metadata-hash = ["substrate-wasm-builder?/metadata-hash"]
 # When enabled, the runtime API will not be build.
 #
 # This is required by Cumulus to access certain types of the
@@ -387,7 +445,7 @@ disable-runtime-api = []
 # A feature that should be enabled when the runtime should be build for on-chain
 # deployment. This will disable stuff that shouldn't be part of the on-chain wasm
 # to make it smaller like logging for example.
-on-chain-release-build = ["metadata-hash", "sp-api/disable-logging"]
+on-chain-release-build = ["sp-api/disable-logging", "metadata-hash"]
 
 # Set timing constants (e.g. session period) to faster versions to speed up testing.
 fast-runtime = []

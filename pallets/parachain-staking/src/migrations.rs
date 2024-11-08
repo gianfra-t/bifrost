@@ -18,9 +18,12 @@
 
 #![allow(unused)]
 
+use super::*;
 use frame_support::{
 	migration::storage_key_iter,
+	pallet,
 	pallet_prelude::PhantomData,
+	storage_alias,
 	traits::{Get, OnRuntimeUpgrade, ReservableCurrency},
 	weights::Weight,
 	Twox64Concat,
@@ -30,13 +33,13 @@ use parity_scale_codec::{Decode, Encode};
 extern crate alloc;
 #[cfg(feature = "try-runtime")]
 use alloc::{format, string::ToString};
-
+use frame_support::pallet_prelude::ValueQuery;
 use frame_system::pallet_prelude::BlockNumberFor;
 #[cfg(feature = "try-runtime")]
 use scale_info::prelude::string::String;
 use sp_runtime::{
 	traits::{AccountIdConversion, Saturating, Zero},
-	Perbill, TryRuntimeError,
+	Perbill, Percent, TryRuntimeError,
 };
 use sp_std::{convert::TryInto, vec::Vec};
 
@@ -52,6 +55,10 @@ use crate::{
 	Event, InflationConfig, Pallet, ParachainBondConfig, ParachainBondInfo, Points, Range, Round,
 	RoundInfo, Staked, TopDelegations, TotalSelected,
 };
+
+const COLLATOR_COMMISSION: Perbill = Perbill::from_percent(10);
+const PARACHAIN_BOND_RESERVE_PERCENT: Percent = Percent::from_percent(0);
+const BLOCKS_PER_ROUND: u32 = 2 * 300;
 
 /// Migration to purge staking storage bloat for `Points` and `AtStake` storage items
 pub struct InitGenesisMigration<T>(PhantomData<T>);
@@ -97,12 +104,12 @@ impl<T: Config> OnRuntimeUpgrade for InitGenesisMigration<T> {
 			}
 		}
 		// Set collator commission to default config
-		<CollatorCommission<T>>::put(T::DefaultCollatorCommission::get());
+		<CollatorCommission<T>>::put(COLLATOR_COMMISSION);
 		// Set parachain bond config to default config
 		<ParachainBondInfo<T>>::put(ParachainBondConfig {
 			// must be set soon; if not => due inflation will be sent to collators/delegators
 			account: T::PalletId::get().into_account_truncating(),
-			percent: T::DefaultParachainBondReservePercent::get(),
+			percent: PARACHAIN_BOND_RESERVE_PERCENT,
 			payment_in_round: T::PaymentInRound::get(),
 		});
 		// Set total selected candidates to minimum config
@@ -111,7 +118,7 @@ impl<T: Config> OnRuntimeUpgrade for InitGenesisMigration<T> {
 		<Pallet<T>>::select_top_candidates(1u32);
 		// Start Round 1 at Block 0
 		let round: RoundInfo<BlockNumberFor<T>> =
-			RoundInfo::new(1u32, 0u32.into(), T::DefaultBlocksPerRound::get());
+			RoundInfo::new(1u32, 0u32.into(), BLOCKS_PER_ROUND);
 		<Round<T>>::put(round);
 		// Snapshot total stake
 		<Staked<T>>::insert(1u32, <Total<T>>::get());
@@ -307,10 +314,9 @@ impl<T: Config> OnRuntimeUpgrade for SplitDelegatorStateIntoDelegationScheduledR
 		// Scheduled decrease amount (bond_less) is correctly migrated
 		let mut actual_delegator_state_entries = 0;
 		for (delegator, state) in <DelegatorState<T>>::iter() {
-			let expected_delegator_decrease_amount: BalanceOf<T> = delegator_state_map
+			let expected_delegator_decrease_amount: BalanceOf<T> = *delegator_state_map
 				.get(&(&*format!("expected_delegator-{:?}_decrease_amount", state.id)).to_string())
-				.expect("must exist")
-				.clone();
+				.expect("must exist");
 			assert_eq!(
 				expected_delegator_decrease_amount, state.less_total,
 				"decrease amount did not match for delegator {:?}",
@@ -443,10 +449,9 @@ impl<T: Config> OnRuntimeUpgrade for PatchIncorrectDelegationSums<T> {
 			Decode::decode(&mut &state[..]).expect("pre_upgrade provides a valid state; qed");
 		// ensure new total counted = top_delegations.sum() + collator self bond
 		for (account, state) in <CandidateInfo<T>>::iter() {
-			let old_count = candidate_total_counted_map
+			let old_count = *candidate_total_counted_map
 				.get(&(&format!("Candidate{:?}TotalCounted", account)[..]).to_string())
-				.expect("qed")
-				.clone();
+				.expect("qed");
 			let new_count = state.total_counted;
 			let top_delegations_sum = <TopDelegations<T>>::get(account)
 				.expect("CandidateInfo exists => TopDelegations exists")
@@ -514,6 +519,50 @@ impl<T: Config> OnRuntimeUpgrade for PurgeStaleStorage<T> {
 			"Expected {} for `Points` count, Found: {}",
 			delay, staked_count
 		);
+		Ok(())
+	}
+}
+
+#[storage_alias]
+/// Temporary storage item to track whether a given delegator's reserve has been migrated.
+pub type DelegatorReserveToLockMigrations<T: Config> =
+	StorageMap<Pallet<T>, Twox64Concat, AccountIdOf<T>, bool, ValueQuery>;
+
+#[storage_alias]
+/// Temporary storage item to track whether a given collator's reserve has been migrated.
+pub type CollatorReserveToLockMigrations<T: Config> =
+	StorageMap<Pallet<T>, Twox64Concat, AccountIdOf<T>, bool, ValueQuery>;
+
+/// Remove the `DelegatorReserveToLock` and `CollatorReserveToLock` storage items
+pub struct RemoveDelegatorReserveToLockAndCollatorReserveToLock<T>(PhantomData<T>);
+impl<T: Config> OnRuntimeUpgrade for RemoveDelegatorReserveToLockAndCollatorReserveToLock<T> {
+	fn on_runtime_upgrade() -> Weight {
+		log::info!(target: "DelegatorReserveToLock", "running migration to remove storage");
+		log::info!(target: "CollatorReserveToLock", "running migration to remove storage");
+		let mut db_weight = Weight::zero();
+		DelegatorReserveToLockMigrations::<T>::iter_keys().for_each(|k| {
+			DelegatorReserveToLockMigrations::<T>::remove(k.clone());
+			log::info!(target: "DelegatorReserveToLock", "running migration to remove {:?}", k);
+			db_weight = db_weight.saturating_add(T::DbWeight::get().writes(1));
+		});
+		CollatorReserveToLockMigrations::<T>::iter_keys().for_each(|k| {
+			CollatorReserveToLockMigrations::<T>::remove(k.clone());
+			log::info!(target: "CollatorReserveToLock", "running migration to remove {:?}", k);
+			db_weight = db_weight.saturating_add(T::DbWeight::get().writes(1));
+		});
+		db_weight
+	}
+
+	#[cfg(feature = "try-runtime")]
+	fn pre_upgrade() -> Result<Vec<u8>, TryRuntimeError> {
+		// trivial migration
+		Ok(Vec::new())
+	}
+
+	#[cfg(feature = "try-runtime")]
+	fn post_upgrade(_state: Vec<u8>) -> Result<(), TryRuntimeError> {
+		assert_eq!(DelegatorReserveToLockMigrations::<T>::iter_keys().count(), 0);
+		assert_eq!(CollatorReserveToLockMigrations::<T>::iter_keys().count(), 0);
 		Ok(())
 	}
 }

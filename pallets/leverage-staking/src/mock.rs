@@ -20,13 +20,16 @@ pub use super::*;
 use crate as leverage_staking;
 use bifrost_asset_registry::AssetIdMaps;
 pub use bifrost_primitives::{
-	currency::*, Balance, CurrencyId, CurrencyIdMapping, SlpOperator, SlpxOperator, TokenSymbol, *,
+	currency::*, Balance, CurrencyId, CurrencyIdMapping, SlpOperator, SlpxOperator, TokenSymbol,
+};
+use bifrost_primitives::{
+	BifrostEntranceAccount, BifrostExitAccount, IncentivePoolAccount, LendMarketPalletId, Moment,
+	MoonbeamChainId, OraclePriceProvider, Price, PriceDetail, Ratio, StableAssetPalletId,
 };
 use bifrost_runtime_common::milli;
 use frame_support::{
 	derive_impl, ord_parameter_types, parameter_types,
 	traits::{ConstU128, ConstU32, Everything, Nothing},
-	PalletId,
 };
 use frame_system::{EnsureRoot, EnsureSignedBy};
 use lend_market::{InterestRateModel, JumpModel, Market, MarketState};
@@ -76,7 +79,7 @@ impl frame_system::Config for Test {
 }
 
 parameter_types! {
-	pub const NativeCurrencyId: CurrencyId = CurrencyId::Native(TokenSymbol::BNC);
+	pub const NativeCurrencyId: CurrencyId = BNC;
 }
 
 orml_traits::parameter_type_with_key! {
@@ -160,6 +163,10 @@ impl xcm_executor::Config for XcmConfig {
 	type AssetExchanger = ();
 	type Aliasers = Nothing;
 	type TransactionalProcessor = FrameTransactionalProcessor;
+	type HrmpNewChannelOpenRequestHandler = ();
+	type HrmpChannelAcceptedHandler = ();
+	type HrmpChannelClosingHandler = ();
+	type XcmRecorder = ();
 }
 
 parameter_type_with_key! {
@@ -230,9 +237,6 @@ impl bifrost_stable_asset::traits::ValidateAssetId<CurrencyId> for EnsurePoolAss
 		true
 	}
 }
-parameter_types! {
-	pub const StableAssetPalletId: PalletId = PalletId(*b"nuts/sta");
-}
 
 impl bifrost_stable_asset::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
@@ -274,9 +278,6 @@ impl leverage_staking::Config for Test {
 parameter_types! {
 	pub const MaximumUnlockIdOfUser: u32 = 1_000;
 	pub const MaximumUnlockIdOfTimeUnit: u32 = 1_000;
-	pub BifrostEntranceAccount: PalletId = PalletId(*b"bf/vtkin");
-	pub BifrostExitAccount: PalletId = PalletId(*b"bf/vtout");
-	pub IncentivePoolAccount: PalletId = PalletId(*b"bf/inpoo");
 }
 
 pub struct SlpxInterface;
@@ -287,7 +288,7 @@ impl SlpxOperator<Balance> for SlpxInterface {
 }
 
 ord_parameter_types! {
-	pub const RelayCurrencyId: CurrencyId = CurrencyId::Token(TokenSymbol::KSM);
+	pub const RelayCurrencyId: CurrencyId = KSM;
 }
 
 impl bifrost_vtoken_minting::Config for Test {
@@ -300,24 +301,16 @@ impl bifrost_vtoken_minting::Config for Test {
 	type ExitAccount = BifrostExitAccount;
 	type FeeAccount = One;
 	type RedeemFeeAccount = One;
-	type BifrostSlp = Slp;
 	type RelayChainToken = RelayCurrencyId;
-	type CurrencyIdConversion = AssetIdMaps<Test>;
-	type CurrencyIdRegister = AssetIdMaps<Test>;
 	type WeightInfo = ();
 	type OnRedeemSuccess = ();
 	type XcmTransfer = XTokens;
-	type AstarParachainId = ConstU32<2007>;
-	type MoonbeamParachainId = ConstU32<2023>;
+	type MoonbeamChainId = MoonbeamChainId;
 	type BifrostSlpx = SlpxInterface;
-	type HydradxParachainId = ConstU32<2034>;
-	type MantaParachainId = ConstU32<2104>;
-	type InterlayParachainId = ConstU32<2032>;
 	type ChannelCommission = ();
 	type MaxLockRecords = ConstU32<100>;
 	type IncentivePoolAccount = IncentivePoolAccount;
-	type VeMinting = ();
-	type AssetIdMaps = AssetIdMaps<Test>;
+	type BbBNC = ();
 }
 
 pub struct Slp;
@@ -339,7 +332,7 @@ impl pallet_timestamp::Config for Test {
 	type WeightInfo = ();
 }
 
-pub struct MockPriceFeeder;
+pub struct MockOraclePriceProvider;
 #[derive(Encode, Decode, Clone, Copy, RuntimeDebug)]
 pub struct CurrencyIdWrap(CurrencyId);
 
@@ -386,7 +379,7 @@ impl DataFeeder<CurrencyId, TimeStampedPrice, u128> for MockDataProvider {
 	}
 }
 
-impl MockPriceFeeder {
+impl MockOraclePriceProvider {
 	thread_local! {
 		pub static PRICES: RefCell<HashMap<CurrencyIdWrap, Option<PriceDetail>>> = {
 			RefCell::new(
@@ -413,21 +406,39 @@ impl MockPriceFeeder {
 	}
 }
 
-impl PriceFeeder for MockPriceFeeder {
+impl OraclePriceProvider for MockOraclePriceProvider {
 	fn get_price(asset_id: &CurrencyId) -> Option<PriceDetail> {
 		Self::PRICES.with(|prices| *prices.borrow().get(&CurrencyIdWrap(*asset_id)).unwrap())
+	}
+
+	fn get_amount_by_prices(
+		_currency_in: &CurrencyId,
+		_amount_in: Balance,
+		_currency_in_price: Price,
+		_currency_out: &CurrencyId,
+		_currency_out_price: Price,
+	) -> Option<Balance> {
+		todo!()
+	}
+
+	fn get_oracle_amount_by_currency_and_amount_in(
+		_currency_in: &CurrencyId,
+		_amount_in: Balance,
+		_currency_out: &CurrencyId,
+	) -> Option<(Balance, Price, Price)> {
+		todo!()
 	}
 }
 
 parameter_types! {
-	pub const LendMarketPalletId: PalletId = PalletId(*b"bf/ldmkt");
 	pub const RewardAssetId: CurrencyId = BNC;
 	pub const LiquidationFreeAssetId: CurrencyId = DOT;
+	pub const MaxLengthLimit: u32 = 500;
 }
 
 impl lend_market::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
-	type PriceFeeder = MockPriceFeeder;
+	type OraclePriceProvider = MockOraclePriceProvider;
 	type PalletId = LendMarketPalletId;
 	type ReserveOrigin = EnsureRoot<u128>;
 	type UpdateOrigin = EnsureRoot<u128>;
@@ -436,6 +447,7 @@ impl lend_market::Config for Test {
 	type Assets = Currencies;
 	type RewardAssetId = RewardAssetId;
 	type LiquidationFreeAssetId = LiquidationFreeAssetId;
+	type MaxLengthLimit = MaxLengthLimit;
 }
 
 impl pallet_prices::Config for Test {

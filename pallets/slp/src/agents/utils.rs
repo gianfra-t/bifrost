@@ -16,12 +16,14 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 use crate::{
-	blake2_256, pallet::Error, AccountIdOf, Config, Decode, LedgerUpdateEntry, MinimumsAndMaximums,
-	Pallet, TrailingZeroInput, Validators, ValidatorsByDelegatorUpdateEntry, ASTR, DOT, GLMR, H160,
+	blake2_256, pallet::Error, AccountIdOf, Config, Decode, DelegatorLedgerXcmUpdateQueue,
+	LedgerUpdateEntry, MinimumsAndMaximums, Pallet, TrailingZeroInput, Validators,
+	ValidatorsByDelegatorUpdateEntry, ValidatorsByDelegatorXcmUpdateQueue, ASTR, DOT, GLMR, H160,
 	KSM, MANTA, MOVR, PHA,
 };
-use bifrost_primitives::CurrencyId;
-use bifrost_xcm_interface::traits::parachains;
+use bifrost_primitives::{
+	AstarChainId, CurrencyId, MantaChainId, MoonbeamChainId, MoonriverChainId, PhalaChainId,
+};
 use frame_support::ensure;
 use parity_scale_codec::Encode;
 use sp_core::Get;
@@ -211,7 +213,7 @@ impl<T: Config> Pallet<T> {
 		// See if the query exists. If it exists, call corresponding chain storage update
 		// function.
 		let (entry, timeout) =
-			Self::get_delegator_ledger_update_entry(query_id).ok_or(Error::<T>::QueryNotExist)?;
+			DelegatorLedgerXcmUpdateQueue::<T>::get(query_id).ok_or(Error::<T>::QueryNotExist)?;
 
 		let now = frame_system::Pallet::<T>::block_number();
 		let mut updated = true;
@@ -244,7 +246,7 @@ impl<T: Config> Pallet<T> {
 	) -> Result<bool, Error<T>> {
 		// See if the query exists. If it exists, call corresponding chain storage update
 		// function.
-		let (entry, timeout) = Self::get_validators_by_delegator_update_entry(query_id)
+		let (entry, timeout) = ValidatorsByDelegatorXcmUpdateQueue::<T>::get(query_id)
 			.ok_or(Error::<T>::QueryNotExist)?;
 
 		let now = frame_system::Pallet::<T>::block_number();
@@ -274,7 +276,7 @@ impl<T: Config> Pallet<T> {
 		// See if the query exists. If it exists, call corresponding chain storage update
 		// function.
 		let (entry, _) =
-			Self::get_delegator_ledger_update_entry(query_id).ok_or(Error::<T>::QueryNotExist)?;
+			DelegatorLedgerXcmUpdateQueue::<T>::get(query_id).ok_or(Error::<T>::QueryNotExist)?;
 		let currency_id = match entry {
 			LedgerUpdateEntry::Substrate(substrate_entry) => Some(substrate_entry.currency_id),
 			LedgerUpdateEntry::ParachainStaking(moonbeam_entry) => Some(moonbeam_entry.currency_id),
@@ -293,7 +295,7 @@ impl<T: Config> Pallet<T> {
 	) -> Result<(), Error<T>> {
 		// See if the query exists. If it exists, call corresponding chain storage update
 		// function.
-		let (entry, _) = Self::get_validators_by_delegator_update_entry(query_id)
+		let (entry, _) = ValidatorsByDelegatorXcmUpdateQueue::<T>::get(query_id)
 			.ok_or(Error::<T>::QueryNotExist)?;
 		let currency_id = match entry {
 			ValidatorsByDelegatorUpdateEntry::Substrate(substrate_entry) =>
@@ -315,20 +317,23 @@ impl<T: Config> Pallet<T> {
 		H160::from_slice(sub_id.as_slice())
 	}
 
-	pub fn get_para_multilocation_by_currency_id(
+	pub fn convert_currency_to_dest_location(
 		currency_id: CurrencyId,
-	) -> Result<MultiLocation, Error<T>> {
+	) -> Result<xcm::v4::Location, Error<T>> {
 		match currency_id {
-			KSM | DOT => Ok(MultiLocation::parent()),
-			MOVR =>
-				Ok(MultiLocation { parents: 1, interior: X1(Parachain(parachains::moonriver::ID)) }),
+			KSM | DOT => Ok(xcm::v4::Location::parent()),
+			MOVR => Ok(xcm::v4::Location::new(
+				1,
+				[xcm::v4::prelude::Parachain(MoonriverChainId::get())],
+			)),
 			GLMR =>
-				Ok(MultiLocation { parents: 1, interior: X1(Parachain(parachains::moonbeam::ID)) }),
+				Ok(xcm::v4::Location::new(1, [xcm::v4::prelude::Parachain(MoonbeamChainId::get())])),
 			ASTR =>
-				Ok(MultiLocation { parents: 1, interior: X1(Parachain(parachains::astar::ID)) }),
+				Ok(xcm::v4::Location::new(1, [xcm::v4::prelude::Parachain(AstarChainId::get())])),
 			MANTA =>
-				Ok(MultiLocation { parents: 1, interior: X1(Parachain(parachains::manta::ID)) }),
-			PHA => Ok(MultiLocation { parents: 1, interior: X1(Parachain(parachains::phala::ID)) }),
+				Ok(xcm::v4::Location::new(1, [xcm::v4::prelude::Parachain(MantaChainId::get())])),
+			PHA =>
+				Ok(xcm::v4::Location::new(1, [xcm::v4::prelude::Parachain(PhalaChainId::get())])),
 			_ => Err(Error::<T>::NotSupportedCurrencyId),
 		}
 	}
@@ -339,36 +344,22 @@ impl<T: Config> Pallet<T> {
 		match currency_id {
 			MOVR => Ok(MultiLocation {
 				parents: 1,
-				interior: X2(
-					Parachain(parachains::moonriver::ID),
-					PalletInstance(parachains::moonriver::PALLET_ID),
-				),
+				interior: X2(Parachain(MoonriverChainId::get()), PalletInstance(10)),
 			}),
 			GLMR => Ok(MultiLocation {
 				parents: 1,
-				interior: X2(
-					Parachain(parachains::moonbeam::ID),
-					PalletInstance(parachains::moonbeam::PALLET_ID),
-				),
+				interior: X2(Parachain(MoonbeamChainId::get()), PalletInstance(10)),
 			}),
-			MANTA =>
-				Ok(MultiLocation { parents: 1, interior: X1(Parachain(parachains::manta::ID)) }),
+			MANTA => Ok(MultiLocation { parents: 1, interior: X1(Parachain(MantaChainId::get())) }),
 			_ => Err(Error::<T>::NotSupportedCurrencyId),
 		}
 	}
 
-	pub fn get_currency_local_multilocation(currency_id: CurrencyId) -> MultiLocation {
+	pub fn convert_currency_to_remote_fee_location(currency_id: CurrencyId) -> xcm::v4::Location {
 		match currency_id {
-			KSM | DOT | PHA | MANTA | ASTR => MultiLocation::here(),
-			MOVR => MultiLocation {
-				parents: 0,
-				interior: X1(PalletInstance(parachains::moonriver::PALLET_ID)),
-			},
-			GLMR => MultiLocation {
-				parents: 0,
-				interior: X1(PalletInstance(parachains::moonbeam::PALLET_ID)),
-			},
-			_ => MultiLocation::here(),
+			MOVR => xcm::v4::Location::new(0, [xcm::v4::prelude::PalletInstance(10)]),
+			GLMR => xcm::v4::Location::new(0, [xcm::v4::prelude::PalletInstance(10)]),
+			_ => xcm::v4::Location::here(),
 		}
 	}
 }

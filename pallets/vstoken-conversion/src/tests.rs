@@ -20,6 +20,7 @@
 
 #![cfg(test)]
 
+use bifrost_primitives::currency::KSM;
 use frame_support::{assert_noop, assert_ok};
 pub use primitives::{VstokenConversionExchangeFee, VstokenConversionExchangeRate};
 use sp_arithmetic::per_things::Percent;
@@ -66,7 +67,7 @@ fn vsksm_convert_to_vsbond() {
 			8,
 			EXCHANGE_RATE
 		));
-		assert_eq!(VstokenConversion::exchange_rate(8), EXCHANGE_RATE);
+		assert_eq!(ExchangeRate::<Runtime>::get(8), EXCHANGE_RATE);
 		assert_noop!(
 			VstokenConversion::vstoken_convert_to_vsbond(
 				Some(BOB).into(),
@@ -141,7 +142,7 @@ fn vsbond_convert_to_vsksm() {
 			8,
 			EXCHANGE_RATE
 		));
-		assert_eq!(VstokenConversion::exchange_rate(8), EXCHANGE_RATE);
+		assert_eq!(ExchangeRate::<Runtime>::get(8), EXCHANGE_RATE);
 		let vsbond_account: AccountId =
 			<Runtime as Config>::VsbondAccount::get().into_account_truncating();
 		assert_ok!(VstokenConversion::vsbond_convert_to_vstoken(

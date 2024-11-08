@@ -48,7 +48,6 @@ use frame_support::{
 use sp_std::marker::PhantomData;
 use crate::WeightInfo;
 
-#[allow(clippy::unnecessary_cast)]
 impl WeightInfo for () {
 	fn create_pool() -> Weight {
 		Weight::from_parts(33_115_000 as u64, 0)

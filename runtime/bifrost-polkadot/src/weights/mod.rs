@@ -20,9 +20,9 @@
 
 //! A list of the different weight modules for our runtime.
 
+pub mod bb_bnc;
 pub mod bifrost_asset_registry;
 pub mod bifrost_buy_back;
-pub mod bifrost_call_switchgear;
 pub mod bifrost_channel_commission;
 pub mod bifrost_clouds_convert;
 pub mod bifrost_cross_in_out;
@@ -32,15 +32,16 @@ pub mod bifrost_fee_share;
 pub mod bifrost_flexible_fee;
 pub mod bifrost_salp;
 pub mod bifrost_slp;
+pub mod bifrost_slp_v2;
 pub mod bifrost_slpx;
 pub mod bifrost_stable_pool;
 pub mod bifrost_system_maker;
 pub mod bifrost_system_staking;
-pub mod bifrost_ve_minting;
 pub mod bifrost_vesting;
 pub mod bifrost_vstoken_conversion;
 pub mod bifrost_vtoken_minting;
 pub mod bifrost_vtoken_voting;
+pub mod bifrost_xcm_interface;
 pub mod orml_oracle;
 pub mod orml_tokens;
 pub mod pallet_xcm;

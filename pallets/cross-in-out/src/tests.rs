@@ -22,8 +22,10 @@ use crate::{mock::*, *};
 use bifrost_primitives::currency::KSM;
 use frame_support::{assert_noop, assert_ok, WeakBoundedVec};
 use sp_runtime::DispatchError::BadOrigin;
+#[allow(deprecated)]
 use xcm::opaque::v2::{Junction, Junctions::X1};
 
+#[allow(deprecated)]
 #[test]
 fn cross_in_and_cross_out_should_work() {
 	ExtBuilder::default().one_hundred_for_alice_n_bob().build().execute_with(|| {
@@ -31,82 +33,10 @@ fn cross_in_and_cross_out_should_work() {
 			parents: 100,
 			interior: X1(Junction::GeneralKey(WeakBoundedVec::default())),
 		};
-
-		assert_noop!(
-			CrossInOut::cross_in(
-				RuntimeOrigin::signed(ALICE),
-				Box::new(location.clone()),
-				KSM,
-				100,
-				None
-			),
-			Error::<Runtime>::CurrencyNotSupportCrossInAndOut
-		);
-
 		CrossCurrencyRegistry::<Runtime>::insert(KSM, ());
-
-		assert_noop!(
-			CrossInOut::cross_in(
-				RuntimeOrigin::signed(ALICE),
-				Box::new(location.clone()),
-				KSM,
-				100,
-				None
-			),
-			Error::<Runtime>::NoCrossingMinimumSet
-		);
-
-		CrossingMinimumAmount::<Runtime>::insert(KSM, (1000, 1000));
-
-		assert_noop!(
-			CrossInOut::cross_in(
-				RuntimeOrigin::signed(ALICE),
-				Box::new(location.clone()),
-				KSM,
-				100,
-				None
-			),
-			Error::<Runtime>::AmountLowerThanMinimum
-		);
-
 		CrossingMinimumAmount::<Runtime>::insert(KSM, (1, 1));
-
-		assert_noop!(
-			CrossInOut::cross_in(
-				RuntimeOrigin::signed(ALICE),
-				Box::new(location.clone()),
-				KSM,
-				100,
-				None
-			),
-			Error::<Runtime>::NotAllowed
-		);
-
-		let bounded_vector = BoundedVec::try_from(vec![ALICE]).unwrap();
-		IssueWhiteList::<Runtime>::insert(KSM, bounded_vector);
-
-		assert_noop!(
-			CrossInOut::cross_in(
-				RuntimeOrigin::signed(ALICE),
-				Box::new(location.clone()),
-				KSM,
-				100,
-				None
-			),
-			Error::<Runtime>::NoAccountIdMapping
-		);
-
 		AccountToOuterMultilocation::<Runtime>::insert(KSM, ALICE, location.clone());
 		OuterMultilocationToAccount::<Runtime>::insert(KSM, location.clone(), ALICE);
-
-		assert_eq!(Tokens::free_balance(KSM, &ALICE), 0);
-		assert_ok!(CrossInOut::cross_in(
-			RuntimeOrigin::signed(ALICE),
-			Box::new(location),
-			KSM,
-			100,
-			None
-		));
 		assert_eq!(Tokens::free_balance(KSM, &ALICE), 100);
 
 		assert_ok!(CrossInOut::cross_out(RuntimeOrigin::signed(ALICE), KSM, 50));
@@ -115,36 +45,15 @@ fn cross_in_and_cross_out_should_work() {
 }
 
 #[test]
-fn add_to_and_remove_from_issue_whitelist_should_work() {
-	ExtBuilder::default().one_hundred_for_alice_n_bob().build().execute_with(|| {
-		assert_eq!(CrossInOut::get_issue_whitelist(KSM), None);
-
-		assert_ok!(CrossInOut::add_to_issue_whitelist(RuntimeOrigin::signed(ALICE), KSM, ALICE));
-		let bounded_vector = BoundedVec::try_from(vec![ALICE]).unwrap();
-		assert_eq!(CrossInOut::get_issue_whitelist(KSM), Some(bounded_vector));
-
-		assert_noop!(
-			CrossInOut::remove_from_issue_whitelist(RuntimeOrigin::signed(ALICE), KSM, BOB),
-			Error::<Runtime>::NotExist
-		);
-
-		assert_ok!(CrossInOut::remove_from_issue_whitelist(
-			RuntimeOrigin::signed(ALICE),
-			KSM,
-			ALICE
-		));
-		let empty_vec = BoundedVec::default();
-		assert_eq!(CrossInOut::get_issue_whitelist(KSM), Some(empty_vec));
-	});
-}
-
-#[test]
 fn add_to_and_remove_from_register_whitelist_should_work() {
 	ExtBuilder::default().one_hundred_for_alice_n_bob().build().execute_with(|| {
-		assert_eq!(CrossInOut::get_register_whitelist(KSM), None);
+		assert_eq!(RegisterWhiteList::<Runtime>::get(KSM), None);
 
 		assert_ok!(CrossInOut::add_to_register_whitelist(RuntimeOrigin::signed(ALICE), KSM, ALICE));
-		assert_eq!(CrossInOut::get_register_whitelist(KSM), Some(vec![ALICE]));
+		assert_eq!(
+			RegisterWhiteList::<Runtime>::get(KSM),
+			Some(BoundedVec::try_from(vec![ALICE]).unwrap())
+		);
 
 		assert_noop!(
 			CrossInOut::remove_from_register_whitelist(RuntimeOrigin::signed(ALICE), KSM, BOB),
@@ -156,10 +65,11 @@ fn add_to_and_remove_from_register_whitelist_should_work() {
 			KSM,
 			ALICE
 		));
-		assert_eq!(CrossInOut::get_register_whitelist(KSM), Some(vec![]));
+		assert_eq!(RegisterWhiteList::<Runtime>::get(KSM), Some(BoundedVec::default()));
 	});
 }
 
+#[allow(deprecated)]
 #[test]
 fn register_linked_account_should_work() {
 	ExtBuilder::default().one_hundred_for_alice_n_bob().build().execute_with(|| {
@@ -183,7 +93,7 @@ fn register_linked_account_should_work() {
 			Error::<Runtime>::NotAllowed
 		);
 
-		RegisterWhiteList::<Runtime>::insert(KSM, vec![ALICE]);
+		RegisterWhiteList::<Runtime>::insert(KSM, BoundedVec::try_from(vec![ALICE]).unwrap());
 
 		assert_noop!(
 			CrossInOut::register_linked_account(
@@ -219,12 +129,7 @@ fn register_linked_account_should_work() {
 #[test]
 fn register_and_deregister_currency_for_cross_in_out_should_work() {
 	ExtBuilder::default().one_hundred_for_alice_n_bob().build().execute_with(|| {
-		assert_ok!(CrossInOut::register_currency_for_cross_in_out(
-			RuntimeOrigin::signed(ALICE),
-			KSM,
-		));
-
-		assert_eq!(CrossCurrencyRegistry::<Runtime>::get(KSM), Some(()));
+		CrossCurrencyRegistry::<Runtime>::insert(KSM, ());
 
 		assert_ok!(CrossInOut::deregister_currency_for_cross_in_out(
 			RuntimeOrigin::signed(ALICE),
@@ -235,6 +140,7 @@ fn register_and_deregister_currency_for_cross_in_out_should_work() {
 	});
 }
 
+#[allow(deprecated)]
 #[test]
 fn change_outer_linked_account_should_work() {
 	ExtBuilder::default().one_hundred_for_alice_n_bob().build().execute_with(|| {

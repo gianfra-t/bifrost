@@ -20,9 +20,9 @@
 use crate as slpx;
 use bifrost_asset_registry::AssetIdMaps;
 pub use bifrost_primitives::{
-	CurrencyId, CurrencyIdMapping, DoNothingExecuteXcm, SlpxOperator, TokenSymbol, BNC, KSM,
+	CurrencyId, CurrencyIdMapping, MockXcmExecutor, SlpxOperator, TokenSymbol, BNC, KSM,
 };
-use bifrost_slp::{QueryId, QueryResponseManager};
+use bifrost_primitives::{MockXcmTransfer, MoonbeamChainId, SlpOperator};
 use cumulus_primitives_core::ParaId;
 use frame_support::{
 	construct_runtime, derive_impl, ord_parameter_types,
@@ -33,26 +33,16 @@ use frame_support::{
 };
 use frame_system::{EnsureRoot, EnsureSignedBy};
 use hex_literal::hex;
-use orml_traits::{
-	location::RelativeReserveProvider, parameter_type_with_key, xcm_transfer::Transferred,
-	MultiCurrency, XcmTransfer,
-};
-use sp_core::ConstU128;
+use orml_traits::parameter_type_with_key;
 use sp_runtime::{
-	traits::{Convert, IdentityLookup, UniqueSaturatedInto},
-	AccountId32, SaturatedConversion,
+	traits::{Convert, IdentityLookup},
+	AccountId32, BuildStorage,
 };
 use sp_std::vec;
 pub use xcm::latest::prelude::*;
-use xcm::{
-	latest::{Junction, Location},
-	opaque::latest::Junction::Parachain,
-};
+use xcm::{latest::Location, opaque::latest::Junction::Parachain};
 use xcm_builder::FrameTransactionalProcessor;
 pub use xcm_builder::{EnsureXcmOrigin, FixedWeightBounds};
-use zenlink_protocol::{
-	AssetBalance, AssetId as ZenlinkAssetId, LocalAssetHandler, PairLpGenerate, ZenlinkMultiAssets,
-};
 
 pub type Balance = u128;
 pub type Amount = i128;
@@ -71,15 +61,10 @@ construct_runtime!(
 	Tokens: orml_tokens,
 	Currencies: bifrost_currencies,
 	AssetRegistry: bifrost_asset_registry,
-	Slp: bifrost_slp,
 	VtokenMinting: bifrost_vtoken_minting,
-	ZenlinkProtocol: zenlink_protocol,
-	XTokens: orml_xtokens,
 	Slpx: slpx,
-	  PolkadotXcm: pallet_xcm,
-	  ParachainInfo: parachain_info,
-	  StableAsset: bifrost_stable_asset,
-	  StablePool: bifrost_stable_pool
+	PolkadotXcm: pallet_xcm,
+	ParachainInfo: parachain_info,
   }
 );
 
@@ -178,6 +163,14 @@ impl SlpxOperator<Balance> for SlpxInterface {
 	}
 }
 
+pub struct MockSlp;
+
+impl<CurrencyId> SlpOperator<CurrencyId> for MockSlp {
+	fn all_delegation_requests_occupied(_: CurrencyId) -> bool {
+		false
+	}
+}
+
 impl bifrost_vtoken_minting::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type MultiCurrency = Currencies;
@@ -189,108 +182,15 @@ impl bifrost_vtoken_minting::Config for Test {
 	type FeeAccount = BifrostFeeAccount;
 	type RedeemFeeAccount = BifrostFeeAccount;
 	type RelayChainToken = RelayCurrencyId;
-	type CurrencyIdConversion = AssetIdMaps<Test>;
-	type CurrencyIdRegister = AssetIdMaps<Test>;
-	type BifrostSlp = Slp;
 	type BifrostSlpx = SlpxInterface;
 	type WeightInfo = ();
 	type OnRedeemSuccess = ();
-	type XcmTransfer = XTokens;
-	type AstarParachainId = ConstU32<2007>;
-	type MoonbeamParachainId = ConstU32<2023>;
-	type HydradxParachainId = ConstU32<2034>;
-	type MantaParachainId = ConstU32<2104>;
-	type InterlayParachainId = ConstU32<2032>;
+	type XcmTransfer = MockXcmTransfer;
+	type MoonbeamChainId = MoonbeamChainId;
 	type ChannelCommission = ();
 	type MaxLockRecords = ConstU32<100>;
 	type IncentivePoolAccount = IncentivePoolAccount;
-	type VeMinting = ();
-	type AssetIdMaps = AssetIdMaps<Test>;
-}
-// Below is the implementation of tokens manipulation functions other than native token.
-pub struct LocalAssetAdaptor<Local>(PhantomData<Local>);
-
-impl<Local, AccountId> LocalAssetHandler<AccountId> for LocalAssetAdaptor<Local>
-where
-	Local: MultiCurrency<AccountId, CurrencyId = CurrencyId>,
-{
-	fn local_balance_of(asset_id: ZenlinkAssetId, who: &AccountId) -> AssetBalance {
-		let currency_id: CurrencyId = asset_id.try_into().unwrap();
-		Local::free_balance(currency_id, &who).saturated_into()
-	}
-
-	fn local_total_supply(asset_id: ZenlinkAssetId) -> AssetBalance {
-		let currency_id: CurrencyId = asset_id.try_into().unwrap();
-		Local::total_issuance(currency_id).saturated_into()
-	}
-
-	fn local_is_exists(asset_id: ZenlinkAssetId) -> bool {
-		let rs: Result<CurrencyId, _> = asset_id.try_into();
-		match rs {
-			Ok(_) => true,
-			Err(_) => false,
-		}
-	}
-
-	fn local_transfer(
-		asset_id: ZenlinkAssetId,
-		origin: &AccountId,
-		target: &AccountId,
-		amount: AssetBalance,
-	) -> DispatchResult {
-		let currency_id: CurrencyId = asset_id.try_into().unwrap();
-		Local::transfer(currency_id, &origin, &target, amount.unique_saturated_into())?;
-
-		Ok(())
-	}
-
-	fn local_deposit(
-		asset_id: ZenlinkAssetId,
-		origin: &AccountId,
-		amount: AssetBalance,
-	) -> Result<AssetBalance, DispatchError> {
-		let currency_id: CurrencyId = asset_id.try_into().unwrap();
-		Local::deposit(currency_id, &origin, amount.unique_saturated_into())?;
-		return Ok(amount);
-	}
-
-	fn local_withdraw(
-		asset_id: ZenlinkAssetId,
-		origin: &AccountId,
-		amount: AssetBalance,
-	) -> Result<AssetBalance, DispatchError> {
-		let currency_id: CurrencyId = asset_id.try_into().unwrap();
-		Local::withdraw(currency_id, &origin, amount.unique_saturated_into())?;
-
-		Ok(amount)
-	}
-}
-
-type MultiAssets = ZenlinkMultiAssets<ZenlinkProtocol, Balances, LocalAssetAdaptor<Currencies>>;
-
-parameter_types! {
-	pub const ZenlinkPalletId: PalletId = PalletId(*b"/zenlink");
-	pub const GetExchangeFee: (u32, u32) = (3, 1000);   // 0.3%
-	pub const SelfParaId: u32 = 2001;
-}
-
-impl zenlink_protocol::Config for Test {
-	type RuntimeEvent = RuntimeEvent;
-	type MultiAssetsHandler = MultiAssets;
-	type PalletId = ZenlinkPalletId;
-	type SelfParaId = SelfParaId;
-
-	type TargetChains = ();
-	type WeightInfo = ();
-	type AssetId = ZenlinkAssetId;
-	type LpGenerate = PairLpGenerate<Self>;
-}
-
-pub struct AccountIdToLocation;
-impl Convert<AccountId, Location> for AccountIdToLocation {
-	fn convert(account_id: AccountId) -> Location {
-		Location::from(Junction::AccountId32 { network: None, id: account_id.into() })
-	}
+	type BbBNC = ();
 }
 
 parameter_types! {
@@ -327,6 +227,10 @@ impl xcm_executor::Config for XcmConfig {
 	type Aliasers = Nothing;
 	type AssetExchanger = ();
 	type TransactionalProcessor = FrameTransactionalProcessor;
+	type HrmpNewChannelOpenRequestHandler = ();
+	type HrmpChannelAcceptedHandler = ();
+	type HrmpChannelClosingHandler = ();
+	type XcmRecorder = ();
 }
 
 parameter_type_with_key! {
@@ -341,47 +245,25 @@ parameter_types! {
 	pub const MaxAssetsForTransfer: usize = 2;
 }
 
-pub struct BifrostCurrencyIdConvert<T>(sp_std::marker::PhantomData<T>);
-impl<T: Get<ParaId>> Convert<CurrencyId, Option<Location>> for BifrostCurrencyIdConvert<T> {
+pub struct CurrencyIdConvert<T>(sp_std::marker::PhantomData<T>);
+impl<T: Get<ParaId>> Convert<CurrencyId, Option<Location>> for CurrencyIdConvert<T> {
 	fn convert(id: CurrencyId) -> Option<Location> {
-		AssetIdMaps::<Test>::get_location(id)
+		AssetIdMaps::<Test>::get_location(&id)
 	}
 }
 
-impl<T: Get<ParaId>> Convert<Location, Option<CurrencyId>> for BifrostCurrencyIdConvert<T> {
+impl<T: Get<ParaId>> Convert<Location, Option<CurrencyId>> for CurrencyIdConvert<T> {
 	fn convert(location: Location) -> Option<CurrencyId> {
-		AssetIdMaps::<Test>::get_currency_id(location)
+		AssetIdMaps::<Test>::get_currency_id(&location)
 	}
 }
 
 impl parachain_info::Config for Test {}
 
-impl orml_xtokens::Config for Test {
-	type RuntimeEvent = RuntimeEvent;
-	type Balance = Balance;
-	type CurrencyId = CurrencyId;
-	type CurrencyIdConvert = BifrostCurrencyIdConvert<ParachainInfo>;
-	type AccountIdToLocation = ();
-	type UniversalLocation = UniversalLocation;
-	type SelfLocation = SelfRelativeLocation;
-	type XcmExecutor = DoNothingExecuteXcm;
-	type Weigher = FixedWeightBounds<UnitWeightCost, RuntimeCall, MaxInstructions>;
-	type BaseXcmWeight = BaseXcmWeight;
-	type MaxAssetsForTransfer = MaxAssetsForTransfer;
-	type MinXcmFee = ParachainMinFee;
-	type LocationsFilter = Everything;
-	type ReserveProvider = RelativeReserveProvider;
-	type RateLimiter = ();
-	type RateLimiterId = ();
-}
-
-ord_parameter_types! {
-	pub const CouncilAccount: AccountId = AccountId::from([1u8; 32]);
-}
 impl bifrost_asset_registry::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type Currency = Balances;
-	type RegisterOrigin = EnsureSignedBy<CouncilAccount, AccountId>;
+	type RegisterOrigin = EnsureRoot<AccountId>;
 	type WeightInfo = ();
 }
 
@@ -390,54 +272,6 @@ impl Get<ParaId> for ParachainId {
 	fn get() -> ParaId {
 		2001.into()
 	}
-}
-
-parameter_types! {
-	pub const MaxTypeEntryPerBlock: u32 = 10;
-	pub const MaxRefundPerBlock: u32 = 10;
-	pub const MaxLengthLimit: u32 = 100;
-}
-
-pub struct SubstrateResponseManager;
-impl QueryResponseManager<QueryId, Location, u64, RuntimeCall> for SubstrateResponseManager {
-	fn get_query_response_record(_query_id: QueryId) -> bool {
-		Default::default()
-	}
-	fn create_query_record(
-		_responder: Location,
-		_call_back: Option<RuntimeCall>,
-		_timeout: u64,
-	) -> u64 {
-		Default::default()
-	}
-	fn remove_query_record(_query_id: QueryId) -> bool {
-		Default::default()
-	}
-}
-
-impl bifrost_slp::Config for Test {
-	type RuntimeEvent = RuntimeEvent;
-	type RuntimeOrigin = RuntimeOrigin;
-	type RuntimeCall = RuntimeCall;
-	type MultiCurrency = Currencies;
-	type ControlOrigin = EnsureSignedBy<One, AccountId>;
-	type WeightInfo = ();
-	type VtokenMinting = VtokenMinting;
-	type BifrostSlpx = Slpx;
-	type AccountConverter = ();
-	type ParachainId = ParachainId;
-	type SubstrateResponseManager = SubstrateResponseManager;
-	type MaxTypeEntryPerBlock = MaxTypeEntryPerBlock;
-	type MaxRefundPerBlock = MaxRefundPerBlock;
-	type OnRefund = ();
-	type ParachainStaking = ();
-	type XcmTransfer = XTokens;
-	type MaxLengthLimit = MaxLengthLimit;
-	type XcmWeightAndFeeHandler = ();
-	type ChannelCommission = ();
-	type StablePoolHandler = ();
-	type AssetIdMaps = AssetIdMaps<Test>;
-	type TreasuryAccount = BifrostFeeAccount;
 }
 
 #[cfg(feature = "runtime-benchmarks")]
@@ -452,9 +286,9 @@ impl pallet_xcm::Config for Test {
 	type SendXcmOrigin = EnsureXcmOrigin<RuntimeOrigin, ()>;
 	type Weigher = FixedWeightBounds<UnitWeightCost, RuntimeCall, MaxInstructions>;
 	type XcmExecuteFilter = Nothing;
-	type XcmExecutor = DoNothingExecuteXcm;
+	type XcmExecutor = MockXcmExecutor;
 	type XcmReserveTransferFilter = Everything;
-	type XcmRouter = bifrost_primitives::DoNothingRouter;
+	type XcmRouter = bifrost_primitives::MockXcmRouter;
 	type XcmTeleportFilter = Nothing;
 	type RuntimeOrigin = RuntimeOrigin;
 	type RuntimeCall = RuntimeCall;
@@ -471,136 +305,25 @@ impl pallet_xcm::Config for Test {
 	type RemoteLockConsumerIdentifier = ();
 }
 
-pub struct EnsurePoolAssetId;
-impl bifrost_stable_asset::traits::ValidateAssetId<CurrencyId> for EnsurePoolAssetId {
-	fn validate(_: CurrencyId) -> bool {
-		true
-	}
-}
-parameter_types! {
-	pub const StableAssetPalletId: PalletId = PalletId(*b"nuts/sta");
-}
-
-impl bifrost_stable_asset::Config for Test {
-	type RuntimeEvent = RuntimeEvent;
-	type AssetId = CurrencyId;
-	type Balance = Balance;
-	type Assets = Tokens;
-	type PalletId = StableAssetPalletId;
-	type AtLeast64BitUnsigned = u128;
-	type FeePrecision = ConstU128<10_000_000_000>;
-	type APrecision = ConstU128<100>;
-	type PoolAssetLimit = ConstU32<5>;
-	type SwapExactOverAmount = ConstU128<100>;
-	type WeightInfo = ();
-	type ListingOrigin = EnsureSignedBy<CouncilAccount, AccountId>;
-	type EnsurePoolAssetId = EnsurePoolAssetId;
-}
-
-impl bifrost_stable_pool::Config for Test {
-	type WeightInfo = ();
-	type ControlOrigin = EnsureRoot<AccountId>;
-	type CurrencyId = CurrencyId;
-	type MultiCurrency = Tokens;
-	type StableAsset = StableAsset;
-	type VtokenMinting = VtokenMinting;
-	type CurrencyIdConversion = AssetIdMaps<Test>;
-	type CurrencyIdRegister = AssetIdMaps<Test>;
-}
-
-// Pallet slpx configuration
-parameter_types! {
-	pub const NativeCurrencyId: CurrencyId = CurrencyId::Native(TokenSymbol::BNC);
-}
-
-pub struct XTokensMock;
-
-impl XcmTransfer<AccountId, Balance, CurrencyId> for XTokensMock {
-	fn transfer(
-		who: AccountId,
-		currency_id: CurrencyId,
-		amount: Balance,
-		dest: Location,
-		_dest_weight_limit: WeightLimit,
-	) -> Result<Transferred<AccountId>, DispatchError> {
-		Currencies::withdraw(currency_id, &who, amount).ok();
-		Currencies::deposit(currency_id, &BOB, amount).ok();
-		Ok(Transferred {
-			sender: who,
-			assets: Default::default(),
-			fee: Asset { id: AssetId(Location::new(1, Here)), fun: Fungible(0u128) },
-			dest,
-		})
-	}
-
-	fn transfer_multiasset(
-		_who: AccountId,
-		_asset: Asset,
-		_dest: Location,
-		_dest_weight_limit: WeightLimit,
-	) -> Result<Transferred<AccountId>, DispatchError> {
-		todo!()
-	}
-
-	fn transfer_with_fee(
-		_who: AccountId,
-		_currency_id: CurrencyId,
-		_amount: Balance,
-		_fee: Balance,
-		_dest: Location,
-		_dest_weight_limit: WeightLimit,
-	) -> Result<Transferred<AccountId>, DispatchError> {
-		todo!()
-	}
-
-	fn transfer_multiasset_with_fee(
-		_who: AccountId,
-		_asset: Asset,
-		_fee: Asset,
-		_dest: Location,
-		_dest_weight_limit: WeightLimit,
-	) -> Result<Transferred<AccountId>, DispatchError> {
-		todo!()
-	}
-
-	fn transfer_multicurrencies(
-		_who: AccountId,
-		_currencies: Vec<(CurrencyId, Balance)>,
-		_fee_item: u32,
-		_dest: Location,
-		_dest_weight_limit: WeightLimit,
-	) -> Result<Transferred<AccountId>, DispatchError> {
-		todo!()
-	}
-
-	fn transfer_multiassets(
-		_who: AccountId,
-		_assets: Assets,
-		_fee: Asset,
-		_dest: Location,
-		_dest_weight_limit: WeightLimit,
-	) -> Result<Transferred<AccountId>, DispatchError> {
-		todo!()
-	}
-}
-
 impl slpx::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
+	type RuntimeOrigin = RuntimeOrigin;
 	type ControlOrigin = EnsureRoot<AccountId>;
 	type MultiCurrency = Currencies;
-	type DexOperator = ZenlinkProtocol;
 	type VtokenMintingInterface = VtokenMinting;
-	type StablePoolHandler = StablePool;
-	type XcmTransfer = XTokensMock;
+	type XcmTransfer = MockXcmTransfer;
 	type XcmSender = ();
 	type CurrencyIdConvert = AssetIdMaps<Test>;
 	type TreasuryAccount = BifrostFeeAccount;
 	type ParachainId = ParachainId;
 	type WeightInfo = ();
+	type MaxOrderSize = ConstU32<500>;
 }
 
-#[cfg(feature = "runtime-benchmarks")]
+// Build genesis storage according to the mock runtime.
 pub fn new_test_ext() -> sp_io::TestExternalities {
-	use sp_runtime::BuildStorage;
-	frame_system::GenesisConfig::<Test>::default().build_storage().unwrap().into()
+	let t = frame_system::GenesisConfig::<Test>::default().build_storage().unwrap();
+	let mut ext = sp_io::TestExternalities::new(t);
+	ext.execute_with(|| System::set_block_number(0));
+	ext
 }
