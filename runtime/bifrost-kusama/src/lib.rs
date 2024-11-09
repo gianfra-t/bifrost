@@ -1417,7 +1417,7 @@ impl bifrost_system_staking::Config for Runtime {
 	type WeightInfo = weights::bifrost_system_staking::BifrostWeight<Runtime>;
 	type FarmingInfo = Farming;
 	type VtokenMintingInterface = VtokenMinting;
-	type TreasuryAccount = BifrostTreasuryAccount;
+	type BenefitReceivingAccount = BifrostTreasuryAccount;
 	type PalletId = SystemStakingPalletId;
 	type BlocksPerRound = BlocksPerRound;
 	type MaxTokenLen = MaxTokenLen;
