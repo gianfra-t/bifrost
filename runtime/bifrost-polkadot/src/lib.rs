@@ -837,8 +837,6 @@ impl cumulus_pallet_aura_ext::Config for Runtime {}
 parameter_types! {
 	/// Minimum round length is 2 minutes (10 * 12 second block times)
 	pub const MinBlocksPerRound: u32 = 10;
-	/// Blocks per round
-	pub const DefaultBlocksPerRound: u32 = prod_or_fast!(2 * HOURS, 10);
 	/// Rounds before the collator leaving the candidates request can be executed
 	pub const LeaveCandidatesDelay: u32 = 84;
 	/// Rounds before the candidate bond increase/decrease can be executed
@@ -859,10 +857,6 @@ parameter_types! {
 	pub const MaxBottomDelegationsPerCandidate: u32 = 50;
 	/// Maximum delegations per delegator
 	pub const MaxDelegationsPerDelegator: u32 = 100;
-	/// Default fixed percent a collator takes off the top of due rewards
-	pub const DefaultCollatorCommission: Perbill = Perbill::from_percent(10);
-	/// Default percent of inflation set aside for parachain bond every round
-	pub const DefaultParachainBondReservePercent: Percent = Percent::from_percent(0);
 	/// Minimum stake required to become a collator
 	pub MinCollatorStk: u128 = 5000 * BNCS;
 	/// Minimum stake required to be reserved to be a candidate
@@ -870,7 +864,12 @@ parameter_types! {
 	/// Minimum stake required to be reserved to be a delegator
 	pub MinDelegatorStk: u128 = 50 * BNCS;
 	pub AllowInflation: bool = false;
-	pub ToMigrateInvulnables: Vec<AccountId> = prod_or_fast!(vec![],vec![]);
+	pub ToMigrateInvulnables: Vec<AccountId> = prod_or_fast!(vec![
+		hex!["5c7e9ccd1045cac7f8c5c77a79c87f44019d1dda4f5032713bda89c5d73cb36b"].into(),
+		hex!["606b0aad375ae1715fbe6a07315136a8e9c1c84a91230f6a0c296c2953581335"].into(),
+		hex!["b6ba81e73bd39203e006fc99cc1e41976745de2ea2007bf62ed7c9a48ccc5b1d"].into(),
+		hex!["ce42cea2dd0d4ac87ccdd5f0f2e1010955467f5a37587cf6af8ee2b4ba781034"].into(),
+	],vec![]);
 	pub PaymentInRound: u128 = 180 * BNCS;
 	pub InitSeedStk: u128 = 5000 * BNCS;
 }
@@ -1883,7 +1882,7 @@ impl cumulus_pallet_xcmp_queue::migration::v5::V5Config for Runtime {
 pub type Migrations = migrations::Unreleased;
 
 parameter_types! {
-	pub const SystemMakerName: &'static str = "SystemMaker";
+	pub const CollatorSelectionName: &'static str = "CollatorSelection";
 }
 
 /// The runtime migrations per release.
@@ -1896,6 +1895,7 @@ pub mod migrations {
 		// permanent migration, do not remove
 		pallet_xcm::migration::MigrateToLatestXcmVersion<Runtime>,
 		bifrost_parachain_staking::migrations::InitGenesisMigration<Runtime>,
+		frame_support::migrations::RemovePallet<CollatorSelectionName, RocksDbWeight>,
 	);
 }
 
