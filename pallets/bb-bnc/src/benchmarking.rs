@@ -66,10 +66,7 @@ mod benchmarks {
 			BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128),
 		)?;
 
-		let rewards = vec![(
-			CurrencyId::Native(TokenSymbol::BNC),
-			BalanceOf::<T>::unique_saturated_from(10_000_000_000_000u128),
-		)];
+		let rewards = vec![CurrencyId::Native(TokenSymbol::BNC)];
 
 		assert_ok!(BbBNC::<T>::notify_rewards(
 			T::ControlOrigin::try_successful_origin().map_err(|_| BenchmarkError::Weightless)?,
@@ -110,10 +107,7 @@ mod benchmarks {
 			BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128),
 		)?;
 
-		let rewards = vec![(
-			CurrencyId::Native(TokenSymbol::BNC),
-			BalanceOf::<T>::unique_saturated_from(10_000_000_000_000u128),
-		)];
+		let rewards = vec![CurrencyId::Native(TokenSymbol::BNC)];
 
 		assert_ok!(BbBNC::<T>::notify_rewards(
 			T::ControlOrigin::try_successful_origin().map_err(|_| BenchmarkError::Weightless)?,
@@ -160,10 +154,7 @@ mod benchmarks {
 			BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128),
 		)?;
 
-		let rewards = vec![(
-			CurrencyId::Native(TokenSymbol::BNC),
-			BalanceOf::<T>::unique_saturated_from(10_000_000_000_000u128),
-		)];
+		let rewards = vec![CurrencyId::Native(TokenSymbol::BNC)];
 
 		assert_ok!(BbBNC::<T>::notify_rewards(
 			T::ControlOrigin::try_successful_origin().map_err(|_| BenchmarkError::Weightless)?,
@@ -206,10 +197,7 @@ mod benchmarks {
 			BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128),
 		)?;
 
-		let rewards = vec![(
-			CurrencyId::Native(TokenSymbol::BNC),
-			BalanceOf::<T>::unique_saturated_from(10_000_000_000_000u128),
-		)];
+		let rewards = vec![CurrencyId::Native(TokenSymbol::BNC)];
 
 		assert_ok!(BbBNC::<T>::notify_rewards(
 			T::ControlOrigin::try_successful_origin().map_err(|_| BenchmarkError::Weightless)?,
@@ -254,10 +242,7 @@ mod benchmarks {
 			BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128),
 		)?;
 
-		let rewards = vec![(
-			CurrencyId::Native(TokenSymbol::BNC),
-			BalanceOf::<T>::unique_saturated_from(10_000_000_000_000u128),
-		)];
+		let rewards = vec![CurrencyId::Native(TokenSymbol::BNC)];
 
 		assert_ok!(BbBNC::<T>::notify_rewards(
 			T::ControlOrigin::try_successful_origin().map_err(|_| BenchmarkError::Weightless)?,
@@ -287,10 +272,7 @@ mod benchmarks {
 			Some((7 * 86400 / 12u32).into())
 		));
 
-		let rewards = vec![(
-			CurrencyId::Native(TokenSymbol::BNC),
-			BalanceOf::<T>::unique_saturated_from(10_000_000_000_000u128),
-		)];
+		let rewards = vec![CurrencyId::Native(TokenSymbol::BNC)];
 
 		T::MultiCurrency::deposit(
 			CurrencyId::Native(TokenSymbol::BNC),
@@ -351,10 +333,7 @@ mod benchmarks {
 			BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128),
 		)?;
 
-		let rewards = vec![(
-			CurrencyId::Native(TokenSymbol::BNC),
-			BalanceOf::<T>::unique_saturated_from(10_000_000_000_000u128),
-		)];
+		let rewards = vec![CurrencyId::Native(TokenSymbol::BNC)];
 
 		assert_ok!(BbBNC::<T>::notify_rewards(
 			T::ControlOrigin::try_successful_origin().map_err(|_| BenchmarkError::Weightless)?,
@@ -409,10 +388,7 @@ mod benchmarks {
 			BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128),
 		)?;
 
-		let rewards = vec![(
-			CurrencyId::Native(TokenSymbol::BNC),
-			BalanceOf::<T>::unique_saturated_from(10_000_000_000_000u128),
-		)];
+		let rewards = vec![CurrencyId::Native(TokenSymbol::BNC)];
 
 		assert_ok!(BbBNC::<T>::notify_rewards(
 			T::ControlOrigin::try_successful_origin().map_err(|_| BenchmarkError::Weightless)?,
@@ -470,10 +446,7 @@ mod benchmarks {
 			BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128),
 		)?;
 
-		let rewards = vec![(
-			CurrencyId::Native(TokenSymbol::BNC),
-			BalanceOf::<T>::unique_saturated_from(10_000_000_000_000u128),
-		)];
+		let rewards = vec![CurrencyId::Native(TokenSymbol::BNC)];
 
 		assert_ok!(BbBNC::<T>::notify_rewards(
 			T::ControlOrigin::try_successful_origin().map_err(|_| BenchmarkError::Weightless)?,
@@ -531,10 +504,7 @@ mod benchmarks {
 			BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128),
 		)?;
 
-		let rewards = vec![(
-			CurrencyId::Native(TokenSymbol::BNC),
-			BalanceOf::<T>::unique_saturated_from(10_000_000_000_000u128),
-		)];
+		let rewards = vec![CurrencyId::Native(TokenSymbol::BNC)];
 
 		assert_ok!(BbBNC::<T>::notify_rewards(
 			T::ControlOrigin::try_successful_origin().map_err(|_| BenchmarkError::Weightless)?,

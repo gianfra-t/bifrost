@@ -45,7 +45,7 @@ pub trait BbBNCInterface<AccountId, CurrencyId, Balance, BlockNumber> {
 	fn auto_notify_reward(
 		pool_id: PoolId,
 		n: BlockNumber,
-		rewards: Vec<(CurrencyId, Balance)>,
+		rewards: Vec<CurrencyId>,
 	) -> DispatchResult;
 	fn update_reward(
 		pool_id: PoolId,
@@ -65,13 +65,13 @@ pub trait BbBNCInterface<AccountId, CurrencyId, Balance, BlockNumber> {
 	fn add_reward(
 		who: &AccountId,
 		conf: &mut IncentiveConfig<CurrencyId, Balance, BlockNumber, AccountId>,
-		rewards: &Vec<(CurrencyId, Balance)>,
+		rewards: &Vec<CurrencyId>,
 		remaining: Balance,
 	) -> DispatchResult;
 	fn notify_reward(
 		pool_id: PoolId,
 		who: &Option<AccountId>,
-		rewards: Vec<(CurrencyId, Balance)>,
+		rewards: Vec<CurrencyId>,
 	) -> DispatchResult;
 }
 
@@ -285,10 +285,11 @@ impl<T: Config> BbBNCInterface<AccountIdOf<T>, CurrencyIdOf<T>, BalanceOf<T>, Bl
 	fn auto_notify_reward(
 		pool_id: PoolId,
 		n: BlockNumberFor<T>,
-		rewards: Vec<(CurrencyIdOf<T>, BalanceOf<T>)>,
+		rewards: Vec<CurrencyIdOf<T>>,
 	) -> DispatchResult {
 		let conf = IncentiveConfigs::<T>::get(pool_id);
-		if n == conf.period_finish {
+		// If the period is reached or not set, the reward will be notified.
+		if n == conf.period_finish || conf.period_finish == Default::default() {
 			Self::notify_reward_amount(pool_id, &conf.incentive_controller, rewards)?;
 		}
 		Ok(())
@@ -335,11 +336,12 @@ impl<T: Config> BbBNCInterface<AccountIdOf<T>, CurrencyIdOf<T>, BalanceOf<T>, Bl
 			BlockNumberFor<T>,
 			AccountIdOf<T>,
 		>,
-		rewards: &Vec<(CurrencyIdOf<T>, BalanceOf<T>)>,
+		rewards: &Vec<CurrencyIdOf<T>>,
 		remaining: BalanceOf<T>,
 	) -> DispatchResult {
-		rewards.iter().try_for_each(|(currency, reward)| -> DispatchResult {
-			let mut total_reward: BalanceOf<T> = *reward;
+		rewards.iter().try_for_each(|currency| -> DispatchResult {
+			let reward = T::MultiCurrency::free_balance(*currency, who);
+			let mut total_reward: BalanceOf<T> = reward;
 			if remaining != BalanceOf::<T>::zero() {
 				let leftover: BalanceOf<T> = conf
 					.reward_rate
@@ -356,7 +358,7 @@ impl<T: Config> BbBNCInterface<AccountIdOf<T>, CurrencyIdOf<T>, BalanceOf<T>, Bl
 			// Make sure the new reward is less than or equal to the reward owned by the
 			// IncentivePalletId
 			ensure!(
-				total_reward <= currency_amount.saturating_add(*reward),
+				total_reward <= currency_amount.saturating_add(reward),
 				Error::<T>::NotEnoughBalance
 			);
 			let new_reward = total_reward
@@ -368,11 +370,15 @@ impl<T: Config> BbBNCInterface<AccountIdOf<T>, CurrencyIdOf<T>, BalanceOf<T>, Bl
 					*total_reward = new_reward;
 				})
 				.or_insert(new_reward);
+			// If the reward in this round is 0, it will only be recorded without transfer.
+			if reward == BalanceOf::<T>::zero() {
+				return Ok(());
+			}
 			T::MultiCurrency::transfer(
 				*currency,
 				who,
 				&T::IncentivePalletId::get().into_account_truncating(),
-				*reward,
+				reward,
 			)
 		})
 	}
@@ -380,7 +386,7 @@ impl<T: Config> BbBNCInterface<AccountIdOf<T>, CurrencyIdOf<T>, BalanceOf<T>, Bl
 	fn notify_reward(
 		pool_id: PoolId,
 		who: &Option<AccountIdOf<T>>,
-		rewards: Vec<(CurrencyIdOf<T>, BalanceOf<T>)>,
+		rewards: Vec<CurrencyIdOf<T>>,
 	) -> DispatchResult {
 		Self::notify_reward_amount(pool_id, who, rewards)
 	}
@@ -441,7 +447,7 @@ where
 	fn auto_notify_reward(
 		_pool_id: PoolId,
 		_n: BlockNumber,
-		_rewards: Vec<(CurrencyId, Balance)>,
+		_rewards: Vec<CurrencyId>,
 	) -> DispatchResult {
 		Ok(())
 	}
@@ -471,7 +477,7 @@ where
 	fn add_reward(
 		_who: &AccountId,
 		_conf: &mut IncentiveConfig<CurrencyId, Balance, BlockNumber, AccountId>,
-		_rewards: &Vec<(CurrencyId, Balance)>,
+		_rewards: &Vec<CurrencyId>,
 		_remaining: Balance,
 	) -> DispatchResult {
 		Ok(())
@@ -479,7 +485,7 @@ where
 	fn notify_reward(
 		_pool_id: PoolId,
 		_who: &Option<AccountId>,
-		_rewards: Vec<(CurrencyId, Balance)>,
+		_rewards: Vec<CurrencyId>,
 	) -> DispatchResult {
 		Ok(())
 	}

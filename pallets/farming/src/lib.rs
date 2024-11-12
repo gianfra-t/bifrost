@@ -431,7 +431,7 @@ pub mod pallet {
 			GaugePoolInfos::<T>::iter().for_each(|(gid, gauge_pool_info)| {
 				match gauge_pool_info.gauge_state {
 					GaugeState::Bonded => {
-						let rewards = gauge_pool_info.gauge_basic_rewards.into_iter().collect();
+						let rewards = gauge_pool_info.gauge_basic_rewards.into_keys().collect();
 						T::BbBNC::auto_notify_reward(gid, n, rewards).unwrap_or_default();
 					},
 					_ => (),

@@ -240,7 +240,7 @@ fn notify_reward_amount() {
 		assert_ok!(BbBNC::increase_amount(RuntimeOrigin::signed(BOB), 0, 80_000_000_000));
 		assert_eq!(BbBNC::balance_of(&BOB, None), Ok(99715627680));
 
-		let rewards = vec![(KSM, 1_000_000_000)];
+		let rewards = vec![KSM];
 		assert_ok!(BbBNC::notify_rewards(
 			RuntimeOrigin::root(),
 			ALICE,
@@ -255,6 +255,7 @@ fn notify_reward_amount() {
 		System::set_block_number(System::block_number() + 7 * 86400 / 12);
 		assert_ok!(BbBNC::get_rewards_inner(BB_BNC_SYSTEM_POOL_ID, &BOB, None));
 		assert_eq!(Tokens::free_balance(KSM, &BOB), 999986398);
+		assert_ok!(Tokens::deposit(KSM, &ALICE, 1_000_000_000));
 		assert_ok!(BbBNC::notify_rewards(
 			RuntimeOrigin::root(),
 			ALICE,
@@ -289,7 +290,7 @@ fn create_lock_to_withdraw() {
 			Some(4 * 365 * 86400 / 12),
 			Some(14 * 86400 / 12)
 		));
-		let rewards = vec![(KSM, 1000)];
+		let rewards = vec![KSM];
 		assert_ok!(BbBNC::notify_rewards(
 			RuntimeOrigin::root(),
 			ALICE,
