@@ -405,7 +405,7 @@ fn charge_host_fee_and_tune_vtoken_exchange_rate_should_work() {
 		));
 
 		// Tokenpool should have been added 100.
-		let new_token_pool_amount = <Runtime as Config>::VtokenMinting::get_token_pool(FIL);
+		let new_token_pool_amount = <Runtime as Config>::VtokenMinting::total_stake_amount(FIL);
 		assert_eq!(new_token_pool_amount, 180);
 
 		let tune_record = DelegatorLatestTuneRecord::<Runtime>::get(FIL, &location);

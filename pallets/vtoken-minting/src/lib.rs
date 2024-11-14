@@ -31,13 +31,15 @@ mod benchmarking;
 pub mod impls;
 pub mod migration;
 pub mod traits;
+pub mod types;
 pub mod weights;
 pub use weights::WeightInfo;
 
 use crate::impls::Operation;
 use bb_bnc::traits::BbBNCInterface;
 use bifrost_primitives::{
-	CurrencyId, RedeemType, SlpxOperator, TimeUnit, VTokenMintRedeemProvider,
+	CurrencyId, RedeemCreator, RedeemTo, RedeemType, SlpxOperator, TimeUnit,
+	VTokenMintRedeemProvider,
 };
 use frame_support::{
 	pallet_prelude::{DispatchResultWithPostInfo, *},
@@ -54,23 +56,21 @@ use orml_traits::{MultiCurrency, MultiLockableCurrency, XcmTransfer};
 pub use pallet::*;
 use sp_std::vec;
 pub use traits::*;
-
-pub type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
-pub type CurrencyIdOf<T> = <<T as Config>::MultiCurrency as MultiCurrency<
-	<T as frame_system::Config>::AccountId,
->>::CurrencyId;
-pub type BalanceOf<T> = <<T as Config>::MultiCurrency as MultiCurrency<AccountIdOf<T>>>::Balance;
-
-pub type UnlockId = u32;
-
-// incentive lock id for vtoken minted by user
-const INCENTIVE_LOCK_ID: LockIdentifier = *b"vmincntv";
+use types::{
+	AccountIdOf, ActiveState, BalanceOf, CurrencyConfiguration, CurrencyIdOf, RedeemOrderId,
+	INCENTIVE_LOCK_ID,
+};
 
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
+	use crate::types::RedeemQueue;
+
+	/// The current storage version.
+	const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
 
 	#[pallet::pallet]
+	#[pallet::storage_version(STORAGE_VERSION)]
 	pub struct Pallet<T>(_);
 
 	#[pallet::config]
@@ -157,26 +157,13 @@ pub mod pallet {
 			channel_id: Option<u32>,
 		},
 		///	Vtoken redeemed successfully.
-		Redeemed {
-			/// The redeemer account.
-			redeemer: AccountIdOf<T>,
-			/// The currency id redeemed.
-			currency_id: CurrencyIdOf<T>,
-			/// Will be received currency amount.
-			currency_amount: BalanceOf<T>,
-			/// The v_currency amount redeemed.
-			v_currency_amount: BalanceOf<T>,
-			/// The redeem fee.
-			redeem_fee: BalanceOf<T>,
-			/// The unlock_id of redeeming.
-			unlock_id: UnlockId,
-		},
+		Redeemed { id: RedeemOrderId },
 		/// Process redeem successfully.
 		RedeemSuccess {
 			/// The redeemer account.
 			redeemer: AccountIdOf<T>,
 			/// The unlock_id redeemed.
-			unlock_id: UnlockId,
+			unlock_id: RedeemOrderId,
 			/// The currency id redeemed.
 			currency_id: CurrencyIdOf<T>,
 			/// Will transfer to this account.
@@ -210,7 +197,7 @@ pub mod pallet {
 			/// Mint fee
 			fee: BalanceOf<T>,
 			/// The unlock_id rebonded.
-			unlock_id: UnlockId,
+			unlock_id: RedeemOrderId,
 		},
 		/// Set unlock duration.
 		UnlockDurationSet {
@@ -220,11 +207,12 @@ pub mod pallet {
 			unlock_duration: TimeUnit,
 		},
 		/// Set minimum mint amount.
-		MinimumMintSet {
+		MinimumMintAndRedeemSet {
 			/// The currency id set minimum mint amount.
 			currency_id: CurrencyIdOf<T>,
 			/// The minimum mint amount set.
-			minimum_amount: BalanceOf<T>,
+			min_mint_amount: BalanceOf<T>,
+			min_redeem_amount: BalanceOf<T>,
 		},
 		/// Set minimum redeem amount.
 		MinimumRedeemSet {
@@ -244,20 +232,22 @@ pub mod pallet {
 			currency_id: CurrencyIdOf<T>,
 		},
 		/// Set mint fee and redeem fee.
-		FeeSet {
+		FeeRateSet {
 			/// The mint fee rate set.
-			mint_fee: Permill,
+			mint_fee_rate: Permill,
 			/// The redeem fee rate set.
-			redeem_fee: Permill,
+			redeem_fee_rate: Permill,
 		},
 		/// Set hook iteration limit.
 		HookIterationLimitSet { limit: u32 },
 		/// Set unlock total amount.
-		UnlockingTotalSet {
+		TotalAmountSet {
 			/// The currency id set unlock total amount.
 			currency_id: CurrencyIdOf<T>,
 			/// The unlock total amount set.
-			currency_amount: BalanceOf<T>,
+			total_stake_amount: BalanceOf<T>,
+			total_unstake_amount: BalanceOf<T>,
+			total_restake_amount: BalanceOf<T>,
 		},
 		/// Set minimum time unit.
 		MinTimeUnitSet {
@@ -269,11 +259,12 @@ pub mod pallet {
 		/// Fast redeem failed.
 		FastRedeemFailed { err: DispatchError },
 		/// Set ongoing time unit.
-		SetOngoingTimeUnit {
+		SetTimeUnit {
 			/// The currency id set ongoing time unit.
 			currency_id: CurrencyIdOf<T>,
 			/// The ongoing time unit set.
-			time_unit: TimeUnit,
+			ongoing_time_unit: TimeUnit,
+			min_time_unit: TimeUnit,
 		},
 		/// Incentivized minting.
 		IncentivizedMinting {
@@ -342,39 +333,13 @@ pub mod pallet {
 		BalanceZero,
 		/// IncentiveLockBlocksNotSet
 		IncentiveLockBlocksNotSet,
+		ConfigurationNotFound,
 	}
-
-	/// The mint fee and redeem fee.
-	#[pallet::storage]
-	pub type Fees<T: Config> = StorageValue<_, (Permill, Permill), ValueQuery>;
 
 	/// Token pool amount
 	#[pallet::storage]
 	pub type TokenPool<T: Config> =
 		StorageMap<_, Twox64Concat, CurrencyIdOf<T>, BalanceOf<T>, ValueQuery>;
-
-	/// Unlock duration for each currency
-	#[pallet::storage]
-	pub type UnlockDuration<T: Config> = StorageMap<_, Twox64Concat, CurrencyIdOf<T>, TimeUnit>;
-
-	/// Ongoing time unit for each currency
-	#[pallet::storage]
-	pub type OngoingTimeUnit<T: Config> = StorageMap<_, Twox64Concat, CurrencyIdOf<T>, TimeUnit>;
-
-	/// Minimum mint amount for each currency
-	#[pallet::storage]
-	pub type MinimumMint<T: Config> =
-		StorageMap<_, Twox64Concat, CurrencyIdOf<T>, BalanceOf<T>, ValueQuery>;
-
-	/// Minimum redeem amount for each currency
-	#[pallet::storage]
-	pub type MinimumRedeem<T: Config> =
-		StorageMap<_, Twox64Concat, CurrencyIdOf<T>, BalanceOf<T>, ValueQuery>;
-
-	/// Next unlock id for each currency
-	#[pallet::storage]
-	pub type TokenUnlockNextId<T: Config> =
-		StorageMap<_, Twox64Concat, CurrencyIdOf<T>, u32, ValueQuery>;
 
 	/// According to currency_id and unlock_id, unlock information are stored.
 	#[pallet::storage]
@@ -383,7 +348,7 @@ pub mod pallet {
 		Blake2_128Concat,
 		CurrencyIdOf<T>,
 		Blake2_128Concat,
-		UnlockId,
+		RedeemOrderId,
 		(
 			// redeemer account
 			T::AccountId,
@@ -408,8 +373,8 @@ pub mod pallet {
 		(
 			// Total locked amount
 			BalanceOf<T>,
-			// UnlockId list
-			BoundedVec<UnlockId, T::MaximumUnlockIdOfUser>,
+			// RedeemOrderId list
+			BoundedVec<RedeemOrderId, T::MaximumUnlockIdOfUser>,
 		),
 		OptionQuery,
 	>;
@@ -425,22 +390,13 @@ pub mod pallet {
 		(
 			// Total locked amount
 			BalanceOf<T>,
-			// UnlockId list
-			BoundedVec<UnlockId, T::MaximumUnlockIdOfTimeUnit>,
+			// RedeemOrderId list
+			BoundedVec<RedeemOrderId, T::MaximumUnlockIdOfTimeUnit>,
 			// CurrencyId
 			CurrencyIdOf<T>,
 		),
 		OptionQuery,
 	>;
-
-	/// The total amount of tokens that are currently locked for rebonding.
-	#[pallet::storage]
-	pub type TokenToRebond<T: Config> = StorageMap<_, Twox64Concat, CurrencyIdOf<T>, BalanceOf<T>>;
-
-	/// The min time unit for each currency
-	#[pallet::storage]
-	pub type MinTimeUnit<T: Config> =
-		StorageMap<_, Twox64Concat, CurrencyIdOf<T>, TimeUnit, ValueQuery>;
 
 	/// The total amount of tokens that are currently unlocking.
 	#[pallet::storage]
@@ -474,10 +430,23 @@ pub mod pallet {
 		OptionQuery,
 	>;
 
+	//【vtoken -> Blocks】, the locked blocks for each vtoken when minted in an incentive mode
+	#[pallet::storage]
+	pub type ConfigurationByCurrency<T: Config> =
+		StorageMap<_, Blake2_128Concat, CurrencyId, CurrencyConfiguration<BalanceOf<T>>>;
+
+	#[pallet::storage]
+	pub type ActiveStateByCurrency<T: Config> =
+		StorageMap<_, Blake2_128Concat, CurrencyId, ActiveState<BalanceOf<T>>>;
+
+	#[pallet::storage]
+	pub type RedeemQueueByCurrency<T: Config> =
+		StorageMap<_, Blake2_128Concat, CurrencyId, RedeemQueue<T>, ValueQuery>;
+
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn on_initialize(_n: BlockNumberFor<T>) -> Weight {
-			for currency in OngoingTimeUnit::<T>::iter_keys() {
+			for currency in ConfigurationByCurrency::<T>::iter_keys() {
 				let result = Self::handle_ledger_by_currency(currency);
 				match result {
 					Ok(_) => (),
@@ -531,87 +500,11 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			v_currency_id: CurrencyIdOf<T>,
 			v_currency_amount: BalanceOf<T>,
-		) -> DispatchResultWithPostInfo {
-			let redeemer = ensure_signed(origin)?;
-			Self::do_redeem(redeemer, v_currency_id, v_currency_amount, RedeemType::Native)
-		}
-
-		/// Already redeemed currency by burning v_currency. But need to wait for the unlock period.
-		/// In unlock period, you call rebond to cancel the redeem.
-		/// Parameters:
-		/// - `currency_id`: The currency to rebond.
-		/// - `currency_amount`: The amount of currency to rebond. The amount should be less than or
-		///   equal to the redeem amount.
-		#[pallet::call_index(2)]
-		#[pallet::weight(T::WeightInfo::rebond())]
-		pub fn rebond(
-			origin: OriginFor<T>,
-			currency_id: CurrencyIdOf<T>,
-			currency_amount: BalanceOf<T>,
 		) -> DispatchResult {
-			let rebonder = ensure_signed(origin)?;
-			let v_currency_id =
-				currency_id.to_vtoken().map_err(|_| Error::<T>::NotSupportTokenType)?;
-
-			let (user_unlock_amount, unlock_id_list) =
-				UserUnlockLedger::<T>::get(&rebonder, currency_id)
-					.ok_or(Error::<T>::UserUnlockLedgerNotFound)?;
-			ensure!(user_unlock_amount >= currency_amount, Error::<T>::NotEnoughBalanceToUnlock);
-
-			let mut temp_currency_amount = currency_amount;
-			for unlock_id in unlock_id_list.into_iter().rev() {
-				let (_, mut unlock_amount, time_unit, _) =
-					TokenUnlockLedger::<T>::get(currency_id, unlock_id)
-						.ok_or(Error::<T>::TokenUnlockLedgerNotFound)?;
-
-				if temp_currency_amount <= unlock_amount {
-					unlock_amount = temp_currency_amount;
-				} else {
-					temp_currency_amount = temp_currency_amount.saturating_sub(unlock_amount);
-				}
-
-				let is_remove_record = Self::update_unlock_ledger(
-					&rebonder,
-					&currency_id,
-					&unlock_amount,
-					&unlock_id,
-					&time_unit,
-					None,
-					Operation::Sub,
-				)?;
-
-				if !is_remove_record {
-					break;
-				}
-			}
-
-			let (_, v_currency_amount, fee) = Self::mint_without_transfer(
-				&rebonder,
-				v_currency_id,
-				currency_id,
-				currency_amount,
-			)?;
-
-			TokenToRebond::<T>::mutate(&currency_id, |maybe_value| -> Result<(), Error<T>> {
-				match maybe_value {
-					Some(rebonded_amount) => {
-						*rebonded_amount = rebonded_amount
-							.checked_add(&currency_amount)
-							.ok_or(Error::<T>::CalculationOverflow)?;
-						Ok(())
-					},
-					None => Err(Error::<T>::InvalidRebondToken),
-				}
-			})?;
-
-			Self::deposit_event(Event::Rebonded {
-				rebonder,
-				currency_id,
-				currency_amount,
-				v_currency_amount,
-				fee,
-			});
-			Ok(())
+			let redeemer = ensure_signed(origin)?;
+			let redeem_creator = RedeemCreator::Substrate(redeemer.clone());
+			let redeem_to = RedeemTo::Native(redeemer);
+			Self::do_redeem(redeem_creator, v_currency_id, v_currency_amount, redeem_to)
 		}
 
 		/// Same function as Rebond. But need to provide unlock_id.
@@ -623,181 +516,43 @@ pub mod pallet {
 		pub fn rebond_by_unlock_id(
 			origin: OriginFor<T>,
 			currency_id: CurrencyIdOf<T>,
-			unlock_id: UnlockId,
+			redeem_id: RedeemOrderId,
 		) -> DispatchResult {
 			let rebonder = ensure_signed(origin)?;
-
-			let v_currency_id =
-				currency_id.to_vtoken().map_err(|_| Error::<T>::NotSupportTokenType)?;
-
-			let (who, unlock_amount, time_unit, _) =
-				TokenUnlockLedger::<T>::get(currency_id, unlock_id)
-					.ok_or(Error::<T>::TokenUnlockLedgerNotFound)?;
-			ensure!(who == rebonder, Error::<T>::CanNotRebond);
-
-			Self::update_unlock_ledger(
-				&rebonder,
-				&currency_id,
-				&unlock_amount,
-				&unlock_id,
-				&time_unit,
-				None,
-				Operation::Sub,
-			)?;
-
-			let (currency_amount, v_currency_amount, fee) =
-				Self::mint_without_transfer(&rebonder, v_currency_id, currency_id, unlock_amount)?;
-
-			TokenToRebond::<T>::mutate(&currency_id, |maybe_value| -> Result<(), Error<T>> {
-				match maybe_value {
-					Some(rebonded_amount) => {
-						*rebonded_amount = rebonded_amount
-							.checked_add(&currency_amount)
-							.ok_or(Error::<T>::CalculationOverflow)?;
-						Ok(())
-					},
-					None => Err(Error::<T>::InvalidRebondToken),
-				}
-			})?;
-
-			Self::deposit_event(Event::RebondedByUnlockId {
-				rebonder,
-				currency_id,
-				currency_amount: unlock_amount,
-				v_currency_amount,
-				fee,
-				unlock_id,
-			});
-			Ok(())
-		}
-
-		/// Set the unlock duration for a currency.
-		/// Parameters:
-		/// - `currency_id`: The currency to set unlock duration.
-		/// - `unlock_duration`: The unlock duration to set.
-		#[pallet::call_index(4)]
-		#[pallet::weight(T::WeightInfo::set_unlock_duration())]
-		pub fn set_unlock_duration(
-			origin: OriginFor<T>,
-			currency_id: CurrencyIdOf<T>,
-			unlock_duration: TimeUnit,
-		) -> DispatchResult {
-			T::ControlOrigin::ensure_origin(origin)?;
-
-			UnlockDuration::<T>::mutate(currency_id, |old_unlock_duration| {
-				*old_unlock_duration = Some(unlock_duration.clone());
-			});
-
-			Self::deposit_event(Event::UnlockDurationSet { currency_id, unlock_duration });
-			Ok(())
+			Self::do_rebond_by_redeem_id(rebonder, currency_id, redeem_id)
 		}
 
 		/// Set the minimum mint amount for a currency.
 		/// Parameters:
 		/// - `currency_id`: The currency to set minimum mint amount.
 		/// - `minimum_amount`: The minimum mint amount to set.
-		#[pallet::call_index(5)]
-		#[pallet::weight(T::WeightInfo::set_minimum_mint())]
-		pub fn set_minimum_mint(
-			origin: OriginFor<T>,
-			currency_id: CurrencyIdOf<T>,
-			minimum_amount: BalanceOf<T>,
-		) -> DispatchResult {
-			T::ControlOrigin::ensure_origin(origin)?;
-
-			MinimumMint::<T>::mutate(currency_id, |old_amount| {
-				*old_amount = minimum_amount;
-			});
-
-			Self::deposit_event(Event::MinimumMintSet { currency_id, minimum_amount });
-
-			Ok(())
-		}
-
-		/// Set the minimum redeem amount for a currency.
-		/// Parameters:
-		/// - `currency_id`: The currency to set minimum redeem amount.
-		/// - `minimum_amount`: The minimum redeem amount to set.
 		#[pallet::call_index(6)]
-		#[pallet::weight(T::WeightInfo::set_minimum_redeem())]
-		pub fn set_minimum_redeem(
+		#[pallet::weight(T::WeightInfo::set_minimum_mint())]
+		pub fn set_currency_config(
 			origin: OriginFor<T>,
 			currency_id: CurrencyIdOf<T>,
-			minimum_amount: BalanceOf<T>,
+			mint_fee_rate: Permill,
+			redeem_fee_rate: Permill,
+			unlock_duration: TimeUnit,
+			min_mint_amount: BalanceOf<T>,
+			min_redeem_amount: BalanceOf<T>,
+			is_supported_restake: bool,
+			is_supported_fast_redeem: bool,
 		) -> DispatchResult {
 			T::ControlOrigin::ensure_origin(origin)?;
 
-			MinimumRedeem::<T>::mutate(currency_id, |old_amount| {
-				*old_amount = minimum_amount;
-			});
-
-			Self::deposit_event(Event::MinimumRedeemSet { currency_id, minimum_amount });
-			Ok(())
-		}
-
-		/// Support a token to rebond.
-		/// Parameters:
-		/// - `currency_id`: The currency to support rebond.
-		#[pallet::call_index(7)]
-		#[pallet::weight(T::WeightInfo::add_support_rebond_token())]
-		pub fn add_support_rebond_token(
-			origin: OriginFor<T>,
-			currency_id: CurrencyIdOf<T>,
-		) -> DispatchResult {
-			T::ControlOrigin::ensure_origin(origin)?;
-
-			TokenToRebond::<T>::mutate(currency_id, |maybe_value| -> DispatchResult {
-				match maybe_value {
-					Some(_) => Err(Error::<T>::InvalidRebondToken.into()),
-					None => {
-						*maybe_value = Some(BalanceOf::<T>::zero());
-						Self::deposit_event(Event::SupportRebondTokenAdded { currency_id });
-						Ok(())
-					},
-				}
+			ConfigurationByCurrency::<T>::mutate(currency_id, |config| -> DispatchResult {
+				*config = Some(CurrencyConfiguration {
+					mint_fee_rate,
+					redeem_fee_rate,
+					unlock_duration,
+					min_mint_amount,
+					min_redeem_amount,
+					is_supported_restake,
+					is_supported_fast_redeem,
+				});
+				Ok(())
 			})
-		}
-
-		/// Remove the support of a token to rebond.
-		/// Parameters:
-		/// - `currency_id`: The currency to remove support rebond.
-		#[pallet::call_index(8)]
-		#[pallet::weight(T::WeightInfo::remove_support_rebond_token())]
-		pub fn remove_support_rebond_token(
-			origin: OriginFor<T>,
-			currency_id: CurrencyIdOf<T>,
-		) -> DispatchResult {
-			T::ControlOrigin::ensure_origin(origin)?;
-
-			TokenToRebond::<T>::mutate(currency_id, |maybe_value| -> DispatchResult {
-				match maybe_value {
-					Some(_) => {
-						*maybe_value = None;
-						Self::deposit_event(Event::SupportRebondTokenRemoved { currency_id });
-						Ok(())
-					},
-					None => Err(Error::<T>::InvalidRebondToken.into()),
-				}
-			})
-		}
-
-		/// Set the fees for mint and redeem.
-		/// Parameters:
-		/// - `mint_fee`: The fee for mint.
-		/// - `redeem_fee`: The fee for redeem.
-		#[pallet::call_index(9)]
-		#[pallet::weight(T::WeightInfo::set_fees())]
-		pub fn set_fees(
-			origin: OriginFor<T>,
-			mint_fee: Permill,
-			redeem_fee: Permill,
-		) -> DispatchResult {
-			ensure_root(origin)?;
-
-			Fees::<T>::mutate(|fees| *fees = (mint_fee, redeem_fee));
-
-			Self::deposit_event(Event::FeeSet { mint_fee, redeem_fee });
-			Ok(())
 		}
 
 		/// Set the hook iteration limit.
@@ -822,58 +577,33 @@ pub mod pallet {
 		/// - `currency_amount`: The total amount of tokens that are currently locked for unlocking.
 		#[pallet::call_index(11)]
 		#[pallet::weight(T::WeightInfo::set_unlocking_total())]
-		pub fn set_unlocking_total(
+		pub fn set_active_state(
 			origin: OriginFor<T>,
 			currency_id: CurrencyIdOf<T>,
-			currency_amount: BalanceOf<T>,
+			total_stake_amount: BalanceOf<T>,
+			total_unstake_amount: BalanceOf<T>,
+			total_restake_amount: BalanceOf<T>,
+			ongoing_time_unit: TimeUnit,
+			next_redeem_id: RedeemOrderId,
 		) -> DispatchResult {
 			T::ControlOrigin::ensure_origin(origin)?;
-
-			Self::update_unlocking_total(&currency_id, &currency_amount, Operation::Set)?;
-			Self::deposit_event(Event::UnlockingTotalSet { currency_id, currency_amount });
-			Ok(())
-		}
-
-		/// Set the minimum time unit for a currency.
-		/// Parameters:
-		/// - `currency_id`: The currency to set minimum time unit.
-		/// - `time_unit`: The minimum time unit to set.
-		#[pallet::call_index(12)]
-		#[pallet::weight(T::WeightInfo::set_min_time_unit())]
-		pub fn set_min_time_unit(
-			origin: OriginFor<T>,
-			currency_id: CurrencyIdOf<T>,
-			time_unit: TimeUnit,
-		) -> DispatchResult {
-			T::ControlOrigin::ensure_origin(origin)?;
-
-			MinTimeUnit::<T>::mutate(&currency_id, |old_time_unit| {
-				*old_time_unit = time_unit.clone()
-			});
-
-			Self::deposit_event(Event::MinTimeUnitSet { currency_id, time_unit });
-			Ok(())
-		}
-
-		/// Set the ongoing time unit for a currency.
-		/// Parameters:
-		/// - `currency_id`: The currency to set ongoing time unit.
-		/// - `time_unit`: The ongoing time unit to set.
-		#[pallet::call_index(13)]
-		#[pallet::weight(T::WeightInfo::set_ongoing_time_unit())]
-		pub fn set_ongoing_time_unit(
-			origin: OriginFor<T>,
-			currency_id: CurrencyIdOf<T>,
-			time_unit: TimeUnit,
-		) -> DispatchResult {
-			T::ControlOrigin::ensure_origin(origin)?;
-
-			OngoingTimeUnit::<T>::mutate(&currency_id, |old_time_unit| {
-				*old_time_unit = Some(time_unit.clone())
-			});
-
-			Self::deposit_event(Event::SetOngoingTimeUnit { currency_id, time_unit });
-			Ok(())
+			ActiveStateByCurrency::<T>::mutate(currency_id, |active_state| -> DispatchResult {
+				let active_state = active_state.as_mut().ok_or(Error::<T>::Unexpected)?;
+				*active_state = ActiveState {
+					total_stake_amount,
+					total_unstake_amount,
+					total_restake_amount,
+					ongoing_time_unit,
+					next_redeem_id,
+				};
+				Self::deposit_event(Event::TotalAmountSet {
+					currency_id,
+					total_stake_amount,
+					total_unstake_amount,
+					total_restake_amount,
+				});
+				Ok(())
+			})
 		}
 
 		// mint with lock to get incentive vtoken
@@ -894,7 +624,8 @@ pub mod pallet {
 				.map_err(|_| Error::<T>::NotEnoughBalance)?;
 
 			// check whether the currency_id is supported
-			ensure!(MinimumMint::<T>::contains_key(currency_id), Error::<T>::NotSupportTokenType);
+			// ensure!(MinimumMint::<T>::contains_key(currency_id),
+			// Error::<T>::NotSupportTokenType);
 
 			// check whether the user has veBNC
 			let vebnc_balance =

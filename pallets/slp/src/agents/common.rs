@@ -174,7 +174,7 @@ impl<T: Config> Pallet<T> {
 		ensure!(amount > Zero::zero(), Error::<T>::AmountZero);
 
 		let vtoken_issuance = T::MultiCurrency::total_issuance(vtoken);
-		let token_pool = T::VtokenMinting::get_token_pool(currency_id);
+		let token_pool = T::VtokenMinting::total_stake_amount(currency_id);
 		// Calculate how much vksm the beneficiary account can get.
 		let amount: u128 = amount.unique_saturated_into();
 		let vtoken_issuance: u128 = vtoken_issuance.unique_saturated_into();

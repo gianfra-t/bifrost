@@ -1249,7 +1249,7 @@ pub mod pallet {
 			let (limit_num, max_permill) = CurrencyTuneExchangeRateLimit::<T>::get(currency_id)
 				.ok_or(Error::<T>::TuneExchangeRateLimitNotSet)?;
 			// Get pool token value
-			let pool_token = T::VtokenMinting::get_token_pool(currency_id);
+			let pool_token = T::VtokenMinting::total_stake_amount(currency_id);
 			// Calculate max increase allowed.
 			let max_to_increase = max_permill.mul_floor(pool_token);
 			ensure!(value <= max_to_increase, Error::<T>::GreaterThanMaximum);

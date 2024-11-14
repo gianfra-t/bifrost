@@ -26,11 +26,11 @@ use bifrost_asset_registry::AssetIdMaps;
 use bifrost_primitives::{
 	currency::{BNC, DOT, FIL, KSM, MOVR, VBNC, VFIL, VKSM, VMOVR},
 	BifrostEntranceAccount, BifrostExitAccount, BifrostFeeAccount, CurrencyId, CurrencyIdMapping,
-	IncentivePoolAccount, MockXcmTransfer, MoonbeamChainId, SlpxOperator, KUSD,
+	IncentivePoolAccount, MockXcmTransfer, MoonbeamChainId, SlpxOperator, GLMR, KUSD, VDOT, VGLMR,
 };
 use bifrost_runtime_common::{micro, milli};
 use frame_support::{derive_impl, ord_parameter_types, parameter_types, traits::Nothing};
-use frame_system::EnsureSignedBy;
+use frame_system::{EnsureRoot, EnsureSignedBy};
 use orml_traits::parameter_type_with_key;
 use sp_runtime::{
 	traits::{ConstU32, IdentityLookup},
@@ -113,23 +113,7 @@ impl pallet_balances::Config for Runtime {
 
 orml_traits::parameter_type_with_key! {
 	pub ExistentialDeposits: |currency_id: CurrencyId| -> Balance {
-		env_logger::try_init().unwrap_or(());
-
-		log::debug!(
-			"{:?}",currency_id
-		);
-		match currency_id {
-			&BNC => 10 * milli::<Runtime>(NativeCurrencyId::get()),   // 0.01 BNC
-			&KSM => 0,
-			&VKSM => 0,
-			&FIL => 0,
-			&VFIL => 0,
-			&MOVR => 1 * micro::<Runtime>(MOVR),	// MOVR has a decimals of 10e18
-			&VMOVR => 1 * micro::<Runtime>(MOVR),	// MOVR has a decimals of 10e18
-			&VBNC => 10 * milli::<Runtime>(NativeCurrencyId::get()),  // 0.01 BNC
-			_ => AssetIdMaps::<Runtime>::get_currency_metadata(*currency_id)
-				.map_or(Balance::max_value(), |metatata| metatata.minimal_balance)
-		}
+		0
 	};
 }
 impl orml_tokens::Config for Runtime {
@@ -166,7 +150,7 @@ ord_parameter_types! {
 impl vtoken_minting::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type MultiCurrency = Currencies;
-	type ControlOrigin = EnsureSignedBy<One, AccountId>;
+	type ControlOrigin = EnsureRoot<AccountId>;
 	type MaximumUnlockIdOfUser = MaximumUnlockIdOfUser;
 	type MaximumUnlockIdOfTimeUnit = MaximumUnlockIdOfTimeUnit;
 	type MaxLockRecords = MaxLockRecords;
@@ -218,9 +202,13 @@ impl ExtBuilder {
 		self
 	}
 
-	pub fn one_hundred_for_alice_n_bob(self) -> Self {
+	pub fn setup_funds(self) -> Self {
 		self.balances(vec![
 			(ALICE, BNC, 1000000000000000000000),
+			(BOB, DOT, 1000_0_000_000_000),
+			(BOB, VDOT, 1000_0_000_000_000),
+			(BOB, GLMR, 1000_000_000_000_000_000_000),
+			(BOB, VGLMR, 1000_000_000_000_000_000_000),
 			(BOB, BNC, 1000000000000),
 			(BOB, VKSM, 1000),
 			(BOB, KSM, 1000000000000),
@@ -259,19 +247,30 @@ impl ExtBuilder {
 		bifrost_asset_registry::GenesisConfig::<Runtime> {
 			currency: vec![
 				(DOT, 100_000_000, None),
+				(GLMR, 100_000_000, None),
 				(KSM, 10_000_000, None),
 				(BNC, 10_000_000, None),
 				(FIL, 10_000_000, None),
 			],
-			vcurrency: vec![],
+			vcurrency: vec![VDOT, VGLMR, VKSM, VBNC, VFIL],
 			vsbond: vec![],
 			phantom: Default::default(),
 		}
 		.assimilate_storage(&mut t)
 		.unwrap();
 
-		t.into()
+		let mut ext = sp_io::TestExternalities::new(t);
+		ext.execute_with(|| System::set_block_number(1));
+		ext
 	}
+}
+
+pub(crate) fn last_event() -> RuntimeEvent {
+	frame_system::Pallet::<Runtime>::events().pop().expect("Event expected").event
+}
+
+pub(crate) fn expect_event<E: Into<RuntimeEvent>>(e: E) {
+	assert_eq!(last_event(), e.into());
 }
 
 /// Run until a particular block.

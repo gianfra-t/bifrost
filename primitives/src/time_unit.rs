@@ -23,7 +23,7 @@ use scale_info::TypeInfo;
 use sp_core::{Decode, Encode, RuntimeDebug};
 
 // For vtoken-minting and slp modules
-#[derive(Encode, Decode, Clone, RuntimeDebug, Eq, TypeInfo, MaxEncodedLen)]
+#[derive(Encode, Decode, Copy, Clone, RuntimeDebug, Eq, TypeInfo, MaxEncodedLen)]
 pub enum TimeUnit {
 	// Kusama staking time unit
 	Era(#[codec(compact)] u32),

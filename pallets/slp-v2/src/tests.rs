@@ -820,7 +820,7 @@ fn update_token_exchange_rate_should_work() {
 		assert_ok!(VtokenMinting::increase_token_pool(currency_id, token_pool));
 
 		set_protocol_configuration();
-		assert_eq!(VtokenMinting::get_token_pool(currency_id), token_pool);
+		assert_eq!(VtokenMinting::total_stake_amount(currency_id), token_pool);
 
 		RelaychainDataProvider::set_block_number(100);
 
@@ -849,7 +849,7 @@ fn update_token_exchange_rate_should_work() {
 		});
 		let vtoken_total_issuance = vtoken_total_issuance + protocol_fee;
 		let token_pool = token_pool + amount;
-		assert_eq!(VtokenMinting::get_token_pool(currency_id), token_pool);
+		assert_eq!(VtokenMinting::total_stake_amount(currency_id), token_pool);
 		assert_eq!(Currencies::total_issuance(VASTR), vtoken_total_issuance);
 		assert_eq!(
 			Currencies::free_balance(VASTR, &CommissionPalletId::get().into_account_truncating()),
@@ -883,7 +883,7 @@ fn update_token_exchange_rate_should_work() {
 		});
 		let vtoken_total_issuance = vtoken_total_issuance + protocol_fee_1;
 		let token_pool = token_pool + amount;
-		assert_eq!(VtokenMinting::get_token_pool(currency_id), token_pool);
+		assert_eq!(VtokenMinting::total_stake_amount(currency_id), token_pool);
 		assert_eq!(Currencies::total_issuance(VASTR), vtoken_total_issuance);
 		assert_eq!(
 			Currencies::free_balance(VASTR, &CommissionPalletId::get().into_account_truncating()),

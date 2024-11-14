@@ -21,8 +21,8 @@
 #![allow(clippy::unnecessary_cast)]
 
 use crate::{
-	AssetIds, CurrencyId, DerivativeIndex, LeasePeriod, ParaId, PoolId, RedeemType, TokenId,
-	TokenSymbol, XcmOperationType,
+	AssetIds, CurrencyId, DerivativeIndex, LeasePeriod, ParaId, PoolId, TokenId, TokenSymbol,
+	XcmOperationType,
 };
 use frame_support::pallet_prelude::{DispatchResultWithPostInfo, Weight};
 use parity_scale_codec::{Decode, Encode, FullCodec};
@@ -97,40 +97,6 @@ where
 			None => false,
 		}
 	}
-}
-
-/// The interface to call VtokenMinting module functions.
-pub trait VtokenMintingOperator<CurrencyId, Balance, AccountId, TimeUnit> {
-	/// Get the currency tokenpool amount.
-	fn get_token_pool(currency_id: CurrencyId) -> Balance;
-
-	/// Increase the token amount for the storage "token_pool" in the VtokenMining module.
-	fn increase_token_pool(currency_id: CurrencyId, token_amount: Balance) -> DispatchResult;
-
-	/// Decrease the token amount for the storage "token_pool" in the VtokenMining module.
-	fn decrease_token_pool(currency_id: CurrencyId, token_amount: Balance) -> DispatchResult;
-
-	/// Update the ongoing era for a CurrencyId.
-	fn update_ongoing_time_unit(currency_id: CurrencyId, time_unit: TimeUnit) -> DispatchResult;
-
-	/// Get the current era of a CurrencyId.
-	fn get_ongoing_time_unit(currency_id: CurrencyId) -> Option<TimeUnit>;
-
-	/// Get the the unlocking records of a certain time unit.
-	fn get_unlock_records(
-		currency_id: CurrencyId,
-		time_unit: TimeUnit,
-	) -> Option<(Balance, Vec<u32>)>;
-
-	/// Get currency Entrance and Exit accounts.【entrance_account, exit_account】
-	fn get_entrance_and_exit_accounts() -> (AccountId, AccountId);
-
-	/// Get the token_unlock_ledger storage info to refund to the due era unlocking users.
-	fn get_token_unlock_ledger(
-		currency_id: CurrencyId,
-		index: u32,
-	) -> Option<(AccountId, Balance, TimeUnit, RedeemType<AccountId>)>;
-	fn get_moonbeam_parachain_id() -> u32;
 }
 
 /// Trait for Vtoken-Minting module to check whether accept redeeming or not.
@@ -233,99 +199,6 @@ impl<CurrencyId> CurrencyIdRegister<CurrencyId> for () {
 pub trait FarmingInfo<Balance, CurrencyId> {
 	/// Get the currency token shares.
 	fn get_token_shares(pool_id: PoolId, currency_id: CurrencyId) -> Balance;
-}
-
-pub trait VtokenMintingInterface<AccountId, CurrencyId, Balance> {
-	fn mint(
-		exchanger: AccountId,
-		token_id: CurrencyId,
-		token_amount: Balance,
-		remark: BoundedVec<u8, ConstU32<32>>,
-		channel_id: Option<u32>,
-	) -> Result<Balance, DispatchError>;
-	fn redeem(
-		exchanger: AccountId,
-		vtoken_id: CurrencyId,
-		vtoken_amount: Balance,
-	) -> DispatchResultWithPostInfo;
-	fn slpx_redeem(
-		exchanger: AccountId,
-		vtoken_id: CurrencyId,
-		vtoken_amount: Balance,
-		redeem: RedeemType<AccountId>,
-	) -> DispatchResultWithPostInfo;
-	fn get_v_currency_amount_by_currency_amount(
-		token_id: CurrencyId,
-		vtoken_id: CurrencyId,
-		token_amount: Balance,
-	) -> Result<Balance, DispatchError>;
-	fn get_currency_amount_by_v_currency_amount(
-		token_id: CurrencyId,
-		vtoken_id: CurrencyId,
-		vtoken_amount: Balance,
-	) -> Result<Balance, DispatchError>;
-	fn get_token_pool(currency_id: CurrencyId) -> Balance;
-	fn get_minimums_redeem(vtoken_id: CurrencyId) -> Balance;
-	fn get_moonbeam_parachain_id() -> u32;
-}
-
-impl<AccountId, CurrencyId, Balance: Zero> VtokenMintingInterface<AccountId, CurrencyId, Balance>
-	for ()
-{
-	fn mint(
-		_exchanger: AccountId,
-		_token_id: CurrencyId,
-		_token_amount: Balance,
-		_remark: BoundedVec<u8, ConstU32<32>>,
-		_channel_id: Option<u32>,
-	) -> Result<Balance, DispatchError> {
-		Ok(Zero::zero())
-	}
-
-	fn redeem(
-		_exchanger: AccountId,
-		_vtoken_id: CurrencyId,
-		_vtoken_amount: Balance,
-	) -> DispatchResultWithPostInfo {
-		Ok(().into())
-	}
-
-	fn slpx_redeem(
-		_exchanger: AccountId,
-		_vtoken_id: CurrencyId,
-		_vtoken_amount: Balance,
-		_redeem_type: RedeemType<AccountId>,
-	) -> DispatchResultWithPostInfo {
-		Ok(().into())
-	}
-
-	fn get_v_currency_amount_by_currency_amount(
-		_token_id: CurrencyId,
-		_vtoken_id: CurrencyId,
-		_token_amount: Balance,
-	) -> Result<Balance, DispatchError> {
-		Ok(Zero::zero())
-	}
-
-	fn get_currency_amount_by_v_currency_amount(
-		_token_id: CurrencyId,
-		_vtoken_id: CurrencyId,
-		_vtoken_amount: Balance,
-	) -> Result<Balance, DispatchError> {
-		Ok(Zero::zero())
-	}
-
-	fn get_token_pool(_currency_id: CurrencyId) -> Balance {
-		Zero::zero()
-	}
-
-	fn get_minimums_redeem(_vtoken_id: CurrencyId) -> Balance {
-		Zero::zero()
-	}
-
-	fn get_moonbeam_parachain_id() -> u32 {
-		0
-	}
 }
 
 pub trait TryConvertFrom<CurrencyId> {

@@ -23,22 +23,6 @@ use parity_scale_codec::{Decode, Encode};
 use sp_core::H160;
 use sp_runtime::RuntimeDebug;
 
-#[derive(PartialEq, Eq, Clone, Encode, Decode, RuntimeDebug, scale_info::TypeInfo)]
-pub enum RedeemTo<AccountId> {
-	/// Native chain.
-	Native(AccountId),
-	/// Astar chain.
-	Astar(AccountId),
-	/// Moonbeam chain.
-	Moonbeam(H160),
-	/// Hydradx chain.
-	Hydradx(AccountId),
-	/// Interlay chain.
-	Interlay(AccountId),
-	/// Manta chain.
-	Manta(AccountId),
-}
-
 pub trait OnRedeemSuccess<AccountId, CurrencyId, Balance> {
 	fn on_redeem_success(
 		token_id: CurrencyId,

@@ -17,20 +17,20 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 // Ensure we're `no_std` when compiling for Wasm.
-#![cfg_attr(not(feature = "std"), no_std)]
 
 use crate::{
-	AccountIdOf, BalanceOf, Config, CurrencyIdOf, Error, Event, Fees, HookIterationLimit,
-	MinTimeUnit, MinimumMint, MinimumRedeem, MintWithLockBlocks, OnRedeemSuccess, OngoingTimeUnit,
-	Pallet, RedeemTo, TimeUnitUnlockLedger, TokenPool, TokenUnlockLedger, TokenUnlockNextId,
-	UnlockDuration, UnlockId, UnlockingTotal, UserUnlockLedger, VtokenIncentiveCoef,
-	VtokenLockLedger, WeightInfo,
+	types::{ActiveState, CurrencyConfiguration, RedeemOrder, RedeemQueue, INCENTIVE_LOCK_ID},
+	AccountIdOf, ActiveStateByCurrency, BalanceOf, Config, ConfigurationByCurrency, CurrencyIdOf,
+	Error, Event, HookIterationLimit, MintWithLockBlocks, OnRedeemSuccess, Pallet, RedeemOrderId,
+	RedeemQueueByCurrency, TimeUnitUnlockLedger, TokenPool, TokenUnlockLedger, UnlockingTotal,
+	UserUnlockLedger, VtokenIncentiveCoef, VtokenLockLedger, WeightInfo,
 };
 use bb_bnc::traits::BbBNCInterface;
 use bifrost_primitives::{
 	currency::BNC, AstarChainId, CurrencyId, CurrencyIdExt, HydrationChainId, InterlayChainId,
-	MantaChainId, RedeemType, SlpxOperator, TimeUnit, VTokenMintRedeemProvider,
-	VTokenSupplyProvider, VtokenMintingInterface, VtokenMintingOperator, FIL,
+	MantaChainId, RedeemCreator, RedeemTo, RedeemType, SlpxOperator, TimeUnit,
+	VTokenMintRedeemProvider, VTokenSupplyProvider, VtokenMintingInterface, VtokenMintingOperator,
+	FIL,
 };
 use frame_support::{
 	pallet_prelude::{DispatchResultWithPostInfo, *},
@@ -43,13 +43,14 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::*;
 use orml_traits::{MultiCurrency, MultiLockableCurrency, XcmTransfer};
-use sp_core::U256;
-use sp_runtime::{helpers_128bit::multiply_by_rational_with_rounding, Rounding};
+use sp_core::{H160, U256};
+use sp_runtime::{
+	helpers_128bit::multiply_by_rational_with_rounding,
+	traits::{BlakeTwo256, Hash},
+	Rounding,
+};
 use sp_std::{vec, vec::Vec};
 use xcm::{prelude::*, v4::Location};
-
-// incentive lock id for vtoken minted by user
-const INCENTIVE_LOCK_ID: LockIdentifier = *b"vmincntv";
 
 #[derive(Encode, Decode, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Operation {
@@ -59,346 +60,27 @@ pub enum Operation {
 }
 
 impl<T: Config> Pallet<T> {
-	/// Update the token pool amount.
-	/// Parameters:
-	/// - `currency_id`: The currency id.
-	/// - `currency_amount`: The currency amount.
-	/// - `operation`: The operation type. Set, Add, Sub.
-	pub fn update_token_pool(
-		currency_id: &CurrencyId,
-		currency_amount: &BalanceOf<T>,
-		operation: Operation,
-	) -> DispatchResult {
-		TokenPool::<T>::mutate(currency_id, |token_pool_amount| -> DispatchResult {
-			match operation {
-				Operation::Set => *token_pool_amount = *currency_amount,
-				Operation::Add =>
-					*token_pool_amount = token_pool_amount
-						.checked_add(currency_amount)
-						.ok_or(Error::<T>::CalculationOverflow)?,
-				Operation::Sub =>
-					*token_pool_amount = token_pool_amount
-						.checked_sub(currency_amount)
-						.ok_or(Error::<T>::CalculationOverflow)?,
-			}
-			Ok(())
-		})
-	}
-
-	/// Update the unlocking total amount.
-	/// Parameters:
-	/// - `currency_id`: The currency id.
-	/// - `currency_amount`: The currency amount.
-	/// - `operation`: The operation type. Set, Add, Sub.
-	pub fn update_unlocking_total(
-		currency_id: &CurrencyId,
-		currency_amount: &BalanceOf<T>,
-		operation: Operation,
-	) -> DispatchResult {
-		UnlockingTotal::<T>::mutate(currency_id, |unlocking_total_amount| -> DispatchResult {
-			match operation {
-				Operation::Set => *unlocking_total_amount = *currency_amount,
-				Operation::Add =>
-					*unlocking_total_amount = unlocking_total_amount
-						.checked_add(currency_amount)
-						.ok_or(Error::<T>::CalculationOverflow)?,
-				Operation::Sub =>
-					*unlocking_total_amount = unlocking_total_amount
-						.checked_sub(currency_amount)
-						.ok_or(Error::<T>::CalculationOverflow)?,
-			}
-			Ok(())
-		})
-	}
-
-	/// Update the token unlock ledger.
-	/// Parameters:
-	/// - `currency_id`: The currency id.
-	/// - `currency_amount`: The redeem currency amount.
-	/// - `unlock_id`: The unlock id.
-	/// - `lock_to_time_unit`: The lock to time unit.
-	/// - `redeem_type`: The redeem type.
-	/// Returns:
-	/// - `bool`: Whether the record is removed.
-	pub fn update_token_unlock_ledger(
-		redeemer: &AccountIdOf<T>,
-		currency_id: &CurrencyId,
-		currency_amount: &BalanceOf<T>,
-		unlock_id: &UnlockId,
-		lock_to_time_unit: &TimeUnit,
-		redeem_type: Option<RedeemType<AccountIdOf<T>>>,
-		operation: Operation,
-	) -> Result<bool, Error<T>> {
-		TokenUnlockLedger::<T>::mutate_exists(currency_id, unlock_id, |value| match operation {
-			Operation::Set | Operation::Add => {
-				let redeem_type = redeem_type.ok_or(Error::<T>::TimeUnitUnlockLedgerNotFound)?;
-				*value = Some((
-					redeemer.clone(),
-					*currency_amount,
-					lock_to_time_unit.clone(),
-					redeem_type,
-				));
-				Ok(false)
-			},
-			Operation::Sub => {
-				let (_, total_locked_amount, _, _) =
-					value.as_mut().ok_or(Error::<T>::TimeUnitUnlockLedgerNotFound)?;
-
-				if currency_amount >= total_locked_amount {
-					*value = None;
-					Ok(true)
-				} else {
-					*total_locked_amount = total_locked_amount
-						.checked_sub(currency_amount)
-						.ok_or(Error::<T>::CalculationOverflow)?;
-					Ok(false)
-				}
-			},
-		})
-	}
-
-	/// Update the time unit unlock ledger.
-	/// Parameters:
-	/// - `time_unit`: The time unit.
-	/// - `currency_id`: The currency id.
-	/// - `currency_amount`: The redeem currency amount.
-	/// - `unlock_id`: The unlock id.
-	/// - `operation`: The operation type. Set, Add, Sub.
-	/// - `is_remove_record`: Whether to remove the record.
-	pub fn update_time_unit_unlock_ledger(
-		time_unit: &TimeUnit,
-		currency_id: &CurrencyId,
-		currency_amount: &BalanceOf<T>,
-		unlock_id: &UnlockId,
-		operation: Operation,
-		is_remove_record: bool,
-	) -> DispatchResult {
-		TimeUnitUnlockLedger::<T>::mutate_exists(time_unit, currency_id, |unlocking_ledger| {
-			match operation {
-				Operation::Set | Operation::Add => match unlocking_ledger {
-					Some((total_locked, ledger_list, _token_id)) => {
-						ledger_list.try_push(*unlock_id).map_err(|_| Error::<T>::TooManyRedeems)?;
-
-						*total_locked = total_locked
-							.checked_add(&currency_amount)
-							.ok_or(Error::<T>::CalculationOverflow)?;
-					},
-					None =>
-						*unlocking_ledger = Some((
-							*currency_amount,
-							BoundedVec::try_from(vec![*unlock_id])
-								.map_err(|_| Error::<T>::TooManyRedeems)?,
-							*currency_id,
-						)),
-				},
-				Operation::Sub => {
-					let (total_locked_amount, ledger_list, _) = unlocking_ledger
-						.as_mut()
-						.ok_or(Error::<T>::TimeUnitUnlockLedgerNotFound)?;
-
-					if currency_amount >= total_locked_amount {
-						*unlocking_ledger = None;
-					} else {
-						*total_locked_amount = total_locked_amount
-							.checked_sub(currency_amount)
-							.ok_or(Error::<T>::CalculationOverflow)?;
-						if is_remove_record {
-							ledger_list.retain(|x| x != unlock_id);
-						}
-					}
-				},
-			}
-			Ok(())
-		})
-	}
-
-	/// Update the user unlock ledger.
-	/// Parameters:
-	/// - `account`: The account id.
-	/// - `currency_id`: The currency id.
-	/// - `currency_amount`: The redeem currency amount.
-	/// - `unlock_id`: The unlock id.
-	/// - `operation`: The operation type. Set, Add, Sub.
-	/// - `is_remove_record`: Whether to remove the record.
-	pub fn update_user_unlock_ledger(
-		account: &AccountIdOf<T>,
-		currency_id: &CurrencyId,
-		currency_amount: &BalanceOf<T>,
-		unlock_id: &UnlockId,
-		operation: Operation,
-		is_remove_record: bool,
-	) -> Result<(), Error<T>> {
-		UserUnlockLedger::<T>::mutate_exists(account, currency_id, |user_unlock_ledger| {
-			match operation {
-				Operation::Set | Operation::Add => match user_unlock_ledger {
-					Some((total_locked, ledger_list)) => {
-						ledger_list.try_push(*unlock_id).map_err(|_| Error::<T>::TooManyRedeems)?;
-
-						*total_locked = total_locked
-							.checked_add(&currency_amount)
-							.ok_or(Error::<T>::CalculationOverflow)?;
-					},
-					None => {
-						*user_unlock_ledger = Some((
-							*currency_amount,
-							BoundedVec::try_from(vec![*unlock_id])
-								.map_err(|_| Error::<T>::TooManyRedeems)?,
-						));
-					},
-				},
-				Operation::Sub => {
-					let (total_locked_amount, ledger_list) = user_unlock_ledger
-						.as_mut()
-						.ok_or(Error::<T>::TimeUnitUnlockLedgerNotFound)?;
-
-					if currency_amount >= total_locked_amount {
-						*user_unlock_ledger = None;
-					} else {
-						*total_locked_amount = total_locked_amount
-							.checked_sub(currency_amount)
-							.ok_or(Error::<T>::CalculationOverflow)?;
-						if is_remove_record {
-							ledger_list.retain(|x| x != unlock_id);
-						}
-					}
-				},
-			}
-			Ok(())
-		})
-	}
-
-	/// Update the token lock ledger.
-	/// Parameters:
-	/// - `account`: The account id.
-	/// - `currency_id`: The currency id.
-	/// - `currency_amount`: The redeem currency amount.
-	/// - `unlock_id`: The unlock id.
-	/// - `lock_to_time_unit`: The lock to time unit.
-	/// - `redeem_type`: The redeem type.
-	/// - `operation`: The operation type. Set, Add, Sub.
-	pub fn update_unlock_ledger(
-		account: &AccountIdOf<T>,
-		currency_id: &CurrencyId,
-		currency_amount: &BalanceOf<T>,
-		unlock_id: &UnlockId,
-		lock_to_time_unit: &TimeUnit,
-		redeem_type: Option<RedeemType<AccountIdOf<T>>>,
-		operation: Operation,
-	) -> Result<bool, DispatchError> {
-		let is_remove_record = Self::update_token_unlock_ledger(
-			account,
-			currency_id,
-			currency_amount,
-			unlock_id,
-			lock_to_time_unit,
-			redeem_type,
-			operation,
-		)?;
-		Self::update_user_unlock_ledger(
-			account,
-			currency_id,
-			currency_amount,
-			unlock_id,
-			operation,
-			is_remove_record,
-		)?;
-		Self::update_time_unit_unlock_ledger(
-			lock_to_time_unit,
-			currency_id,
-			currency_amount,
-			unlock_id,
-			operation,
-			is_remove_record,
-		)?;
-		Self::update_unlocking_total(&currency_id, &currency_amount, operation)?;
-		Ok(is_remove_record)
-	}
-
-	/// Mint without transfer.
-	/// Parameters:
-	/// - `minter`: The minter account id.
-	/// - `v_currency_id`: The v_currency id.
-	/// - `currency_id`: The currency id.
-	/// - `currency_amount`: The currency amount.
-	/// Returns:
-	/// - `(BalanceOf<T>, BalanceOf<T>, BalanceOf<T>)`: The currency amount, v_currency amount, mint
-	///   fee.
-	pub fn mint_without_transfer(
-		minter: &AccountIdOf<T>,
-		v_currency_id: CurrencyId,
+	pub fn update_config(
 		currency_id: CurrencyId,
-		currency_amount: BalanceOf<T>,
-	) -> Result<(BalanceOf<T>, BalanceOf<T>, BalanceOf<T>), DispatchError> {
-		let (mint_rate, _) = Fees::<T>::get();
-		let mint_fee = mint_rate.mul_floor(currency_amount);
-		// Charging fees
-		T::MultiCurrency::transfer(currency_id, minter, &T::FeeAccount::get(), mint_fee)?;
-
-		let currency_amount =
-			currency_amount.checked_sub(&mint_fee).ok_or(Error::<T>::CalculationOverflow)?;
-		let v_currency_amount = Self::get_v_currency_amount_by_currency_amount(
-			currency_id,
-			v_currency_id,
-			currency_amount,
-		)?;
-
-		// Issue the corresponding v_currency to the user's account.
-		T::MultiCurrency::deposit(v_currency_id, minter, v_currency_amount)?;
-		// Increase the token pool amount.
-		Self::update_token_pool(&currency_id, &currency_amount, Operation::Add)?;
-
-		Ok((currency_amount, v_currency_amount, mint_fee))
+		config: CurrencyConfiguration<BalanceOf<T>>,
+	) -> DispatchResult {
+		ConfigurationByCurrency::<T>::insert(currency_id, config);
+		Ok(())
 	}
 
-	/// Process redeem.
-	/// Parameters:
-	/// - `redeem_currency_id`: The redeem currency id.
-	/// - `redeemer`: The redeemer account id.
-	/// - `unlock_id`: The unlock id.
-	/// - `redeem_currency_amount`: The redeem currency amount.
-	/// - `entrance_account_balance`: The entrance account balance.
-	/// - `time_unit`: The time unit.
-	/// - `redeem_type`: The redeem type.
-	fn process_redeem(
-		redeem_currency_id: CurrencyId,
-		redeemer: AccountIdOf<T>,
-		unlock_id: &UnlockId,
-		redeem_currency_amount: BalanceOf<T>,
-		entrance_account_balance: BalanceOf<T>,
-		time_unit: TimeUnit,
-		redeem_type: RedeemType<AccountIdOf<T>>,
+	pub fn update_active_state(
+		currency_id: &CurrencyId,
+		active_state: ActiveState<BalanceOf<T>>,
 	) -> DispatchResult {
-		let (redeem_currency_amount, redeem_to) = Self::transfer_to_by_redeem_type(
-			redeemer.clone(),
-			redeem_currency_id,
-			redeem_currency_amount,
-			entrance_account_balance,
-			redeem_type,
-		)?;
+		ActiveStateByCurrency::<T>::insert(currency_id, active_state);
+		Ok(())
+	}
 
-		Self::update_unlock_ledger(
-			&redeemer,
-			&redeem_currency_id,
-			&redeem_currency_amount,
-			unlock_id,
-			&time_unit,
-			None,
-			Operation::Sub,
-		)?;
-
-		T::OnRedeemSuccess::on_redeem_success(
-			redeem_currency_id,
-			redeemer.clone(),
-			redeem_currency_amount,
-		);
-
-		Self::deposit_event(Event::RedeemSuccess {
-			redeemer,
-			unlock_id: *unlock_id,
-			currency_id: redeem_currency_id,
-			to: redeem_to,
-			currency_amount: redeem_currency_amount,
-		});
+	pub fn update_redeem_queue(
+		currency_id: &CurrencyId,
+		redeem_queue: &RedeemQueue<T>,
+	) -> DispatchResult {
+		RedeemQueueByCurrency::<T>::insert(currency_id, redeem_queue);
 		Ok(())
 	}
 
@@ -411,97 +93,75 @@ impl<T: Config> Pallet<T> {
 	/// - `redeem_type`: The redeem type.
 	/// Returns:
 	/// - `(BalanceOf<T>, RedeemTo<T::AccountId>)`: The redeem currency amount, redeem to.
-	pub fn transfer_to_by_redeem_type(
-		redeemer: T::AccountId,
-		redeem_currency_id: CurrencyId,
-		mut redeem_currency_amount: BalanceOf<T>,
+	pub fn transfer_to_by_redeem_to(
+		currency_id: CurrencyId,
+		currency_amount: BalanceOf<T>,
+		redeem_to: RedeemTo<T::AccountId>,
 		entrance_account_balance: BalanceOf<T>,
-		redeem_type: RedeemType<T::AccountId>,
-	) -> Result<(BalanceOf<T>, RedeemTo<T::AccountId>), DispatchError> {
+	) -> DispatchResult {
 		let entrance_account = T::EntranceAccount::get().into_account_truncating();
-		if entrance_account_balance >= redeem_currency_amount {
-			if let RedeemType::Native = redeem_type {
-				let ed = T::MultiCurrency::minimum_balance(redeem_currency_id);
-				if redeem_currency_amount >= ed {
-					T::MultiCurrency::transfer(
-						redeem_currency_id,
-						&entrance_account,
-						&redeemer,
-						redeem_currency_amount,
-					)?;
-				}
-				return Ok((redeem_currency_amount, RedeemTo::Native(redeemer)));
+		let ed = T::MultiCurrency::minimum_balance(currency_id);
+
+		if let RedeemTo::Native(account_id) = redeem_to {
+			let currency_amount = currency_amount.min(entrance_account_balance);
+			if currency_amount >= ed {
+				T::MultiCurrency::transfer(
+					currency_id,
+					&entrance_account,
+					&account_id,
+					currency_amount,
+				)?;
 			}
-			let (dest, redeem_to) = match redeem_type {
-				RedeemType::Astar(receiver) => (
-					Location::new(
-						1,
-						[
-							Parachain(AstarChainId::get()),
-							AccountId32 {
-								network: None,
-								id: receiver.encode().try_into().unwrap(),
-							},
-						],
-					),
-					RedeemTo::Astar(receiver),
+			return Ok(());
+		}
+
+		if entrance_account_balance >= currency_amount {
+			let dest = match redeem_to {
+				RedeemTo::Astar(receiver) => Location::new(
+					1,
+					[
+						Parachain(AstarChainId::get()),
+						AccountId32 { network: None, id: receiver.encode().try_into().unwrap() },
+					],
 				),
-				RedeemType::Hydradx(receiver) => (
-					Location::new(
-						1,
-						[
-							Parachain(HydrationChainId::get()),
-							AccountId32 {
-								network: None,
-								id: receiver.encode().try_into().unwrap(),
-							},
-						],
-					),
-					RedeemTo::Hydradx(receiver),
+				RedeemTo::Hydradx(receiver) => Location::new(
+					1,
+					[
+						Parachain(HydrationChainId::get()),
+						AccountId32 { network: None, id: receiver.encode().try_into().unwrap() },
+					],
 				),
-				RedeemType::Interlay(receiver) => (
-					Location::new(
-						1,
-						[
-							Parachain(InterlayChainId::get()),
-							AccountId32 {
-								network: None,
-								id: receiver.encode().try_into().unwrap(),
-							},
-						],
-					),
-					RedeemTo::Interlay(receiver),
+
+				RedeemTo::Interlay(receiver) => Location::new(
+					1,
+					[
+						Parachain(InterlayChainId::get()),
+						AccountId32 { network: None, id: receiver.encode().try_into().unwrap() },
+					],
 				),
-				RedeemType::Manta(receiver) => (
-					Location::new(
-						1,
-						[
-							Parachain(MantaChainId::get()),
-							AccountId32 {
-								network: None,
-								id: receiver.encode().try_into().unwrap(),
-							},
-						],
-					),
-					RedeemTo::Manta(receiver),
+
+				RedeemTo::Manta(receiver) => Location::new(
+					1,
+					[
+						Parachain(MantaChainId::get()),
+						AccountId32 { network: None, id: receiver.encode().try_into().unwrap() },
+					],
 				),
-				RedeemType::Moonbeam(receiver) => (
-					Location::new(
-						1,
-						[
-							Parachain(T::MoonbeamChainId::get()),
-							AccountKey20 { network: None, key: receiver.to_fixed_bytes() },
-						],
-					),
-					RedeemTo::Moonbeam(receiver),
+
+				RedeemTo::Moonbeam(receiver) => Location::new(
+					1,
+					[
+						Parachain(T::MoonbeamChainId::get()),
+						AccountKey20 { network: None, key: receiver.to_fixed_bytes() },
+					],
 				),
-				RedeemType::Native => {
+				RedeemTo::Native(_) => {
 					unreachable!()
 				},
 			};
-			if redeem_currency_id == FIL {
+			if currency_id == FIL {
 				let assets = vec![
-					(redeem_currency_id, redeem_currency_amount),
+					(currency_id, currency_amount),
 					(BNC, T::BifrostSlpx::get_moonbeam_transfer_to_fee()),
 				];
 
@@ -515,72 +175,78 @@ impl<T: Config> Pallet<T> {
 			} else {
 				T::XcmTransfer::transfer(
 					entrance_account.clone(),
-					redeem_currency_id,
-					redeem_currency_amount,
+					currency_id,
+					currency_amount,
 					dest,
 					Unlimited,
 				)?;
 			};
-			Ok((redeem_currency_amount, redeem_to))
-		} else {
-			redeem_currency_amount = entrance_account_balance;
-			let ed = T::MultiCurrency::minimum_balance(redeem_currency_id);
-			if redeem_currency_amount >= ed {
-				T::MultiCurrency::transfer(
-					redeem_currency_id,
-					&entrance_account,
-					&redeemer,
-					redeem_currency_amount,
-				)?;
-			}
-			Ok((redeem_currency_amount, RedeemTo::Native(redeemer)))
 		}
+		Ok(())
 	}
 
 	#[transactional]
-	pub fn handle_ledger_by_currency(currency: CurrencyId) -> DispatchResult {
-		let time_unit = MinTimeUnit::<T>::get(currency);
-		if let Some((_total_locked, ledger_list, currency_id)) =
-			TimeUnitUnlockLedger::<T>::get(&time_unit, currency)
-		{
-			for unlock_id in ledger_list.iter().take(HookIterationLimit::<T>::get() as usize) {
-				if let Some((account, unlock_amount, time_unit, redeem_type)) =
-					TokenUnlockLedger::<T>::get(currency_id, unlock_id)
-				{
-					let entrance_account_balance = T::MultiCurrency::free_balance(
-						currency_id,
-						&T::EntranceAccount::get().into_account_truncating(),
-					);
-					if entrance_account_balance == BalanceOf::<T>::zero() {
-						break;
-					}
+	pub fn handle_ledger_by_currency(currency_id: CurrencyId) -> DispatchResult {
+		let mut redeem_queue = RedeemQueueByCurrency::<T>::get(currency_id);
+		let length = redeem_queue.len();
+		if length == 0 {
+			return Ok(());
+		}
 
-					Self::process_redeem(
-						currency_id,
-						account,
-						unlock_id,
-						unlock_amount,
-						entrance_account_balance,
-						time_unit,
-						redeem_type,
-					)?;
+		let hook_iter_limit = HookIterationLimit::<T>::get() as usize;
+		let to_process = if length > hook_iter_limit { hook_iter_limit } else { length };
+		for _ in 0..to_process {
+			let entrance_account_balance = T::MultiCurrency::free_balance(
+				currency_id,
+				&T::EntranceAccount::get().into_account_truncating(),
+			);
+			if entrance_account_balance == BalanceOf::<T>::zero() {
+				return Ok(());
+			}
+
+			let redeem_creator = match redeem_queue[0].clone().creator {
+				RedeemCreator::Substrate(account_id) => account_id,
+				RedeemCreator::Ethereum(address) => Self::h160_to_account_id(&address),
+			};
+			let redeem_to = redeem_queue[0].redeem_to.clone();
+			let redeem_id = redeem_queue[0].id;
+
+			let mut final_currency_amount = redeem_queue[0].remaining_currency_amount();
+			if final_currency_amount <= entrance_account_balance {
+				redeem_queue.remove(0);
+			} else {
+				if redeem_queue[0].is_native_redeem() {
+					redeem_queue[0].subtract_remaining_currency_amount(entrance_account_balance);
+					final_currency_amount = entrance_account_balance;
 				}
 			}
-		} else {
-			MinTimeUnit::<T>::mutate(currency, |time_unit| -> Result<(), Error<T>> {
-				let unlock_duration =
-					UnlockDuration::<T>::get(currency).ok_or(Error::<T>::UnlockDurationNotFound)?;
-				let ongoing_time =
-					OngoingTimeUnit::<T>::get(currency).ok_or(Error::<T>::OngoingTimeUnitNotSet)?;
-				let result_time_unit =
-					ongoing_time.add(unlock_duration).ok_or(Error::<T>::CalculationOverflow)?;
-				if result_time_unit.gt(time_unit) {
-					*time_unit = time_unit.clone().add_one();
-				}
-				Ok(())
-			})?;
-		};
+			let mut active_state =
+				ActiveStateByCurrency::<T>::get(currency_id).ok_or(Error::<T>::NotEnoughBalance)?;
+			active_state.subtract_stake_amount(final_currency_amount);
 
+			Self::update_redeem_queue(&currency_id, &redeem_queue)?;
+			Self::update_active_state(&currency_id, active_state)?;
+
+			T::OnRedeemSuccess::on_redeem_success(
+				currency_id,
+				redeem_creator.clone(),
+				final_currency_amount,
+			);
+
+			Self::transfer_to_by_redeem_to(
+				currency_id,
+				final_currency_amount,
+				redeem_to.clone(),
+				entrance_account_balance,
+			)?;
+			Self::deposit_event(Event::RedeemSuccess {
+				redeemer: redeem_creator,
+				unlock_id: redeem_id,
+				currency_id,
+				to: redeem_to,
+				currency_amount: final_currency_amount,
+			});
+		}
 		Ok(())
 	}
 
@@ -591,21 +257,38 @@ impl<T: Config> Pallet<T> {
 		remark: BoundedVec<u8, ConstU32<32>>,
 		channel_id: Option<u32>,
 	) -> Result<BalanceOf<T>, DispatchError> {
-		ensure!(
-			currency_amount >= MinimumMint::<T>::get(currency_id),
-			Error::<T>::BelowMinimumMint
-		);
+		let config = ConfigurationByCurrency::<T>::get(currency_id)
+			.ok_or(Error::<T>::ConfigurationNotFound)?;
+
+		ensure!(currency_amount >= config.min_mint_amount(), Error::<T>::BelowMinimumMint);
 		let v_currency_id = currency_id.to_vtoken().map_err(|_| Error::<T>::NotSupportTokenType)?;
 
-		let (currency_amount_excluding_fee, v_currency_amount, mint_fee) =
-			Self::mint_without_transfer(&minter, v_currency_id, currency_id, currency_amount)?;
+		let mint_fee = config.mint_fee_rate().mul_floor(currency_amount);
+		// Charging fees
+		T::MultiCurrency::transfer(currency_id, &minter, &T::FeeAccount::get(), mint_fee)?;
+
+		let currency_amount_exclude_fee =
+			currency_amount.checked_sub(&mint_fee).ok_or(Error::<T>::CalculationOverflow)?;
+		let v_currency_amount = Self::get_v_currency_amount_by_currency_amount(
+			currency_id,
+			v_currency_id,
+			currency_amount_exclude_fee,
+		)?;
+		// Issue the corresponding v_currency to the user's account.
+		T::MultiCurrency::deposit(v_currency_id, &minter, v_currency_amount)?;
+
+		// Increase the token pool amount.
+		let mut active_state = ActiveStateByCurrency::<T>::get(currency_id)
+			.ok_or(Error::<T>::UnlockDurationNotFound)?;
+		active_state.add_stake_amount(currency_amount_exclude_fee);
+		Self::update_active_state(&currency_id, active_state)?;
 
 		// Transfer the user's token to EntranceAccount.
 		T::MultiCurrency::transfer(
 			currency_id,
 			&minter,
 			&T::EntranceAccount::get().into_account_truncating(),
-			currency_amount_excluding_fee,
+			currency_amount_exclude_fee,
 		)?;
 
 		// record the minting information for ChannelCommission module
@@ -620,24 +303,37 @@ impl<T: Config> Pallet<T> {
 			remark,
 			channel_id,
 		});
-		Ok(v_currency_amount.into())
+		Ok(v_currency_amount)
+	}
+
+	pub fn h160_to_account_id(address: &H160) -> T::AccountId {
+		let mut data = [0u8; 24];
+		data[0..4].copy_from_slice(b"evm:");
+		data[4..24].copy_from_slice(&address[..]);
+		let hash = BlakeTwo256::hash(&data);
+
+		let account_id_32 = sp_runtime::AccountId32::from(Into::<[u8; 32]>::into(hash));
+		T::AccountId::decode(&mut account_id_32.as_ref()).expect("Fail to decode address")
 	}
 
 	pub fn do_redeem(
-		redeemer: AccountIdOf<T>,
-		v_currency_id: CurrencyIdOf<T>,
+		redeem_creator: RedeemCreator<T::AccountId>,
+		v_currency_id: CurrencyId,
 		v_currency_amount: BalanceOf<T>,
-		redeem_type: RedeemType<AccountIdOf<T>>,
-	) -> DispatchResultWithPostInfo {
+		redeem_to: RedeemTo<T::AccountId>,
+	) -> DispatchResult {
 		let currency_id = v_currency_id.to_token().map_err(|_| Error::<T>::NotSupportTokenType)?;
-		ensure!(
-			v_currency_amount >= MinimumRedeem::<T>::get(v_currency_id),
-			Error::<T>::BelowMinimumRedeem
-		);
+		let config = ConfigurationByCurrency::<T>::get(currency_id)
+			.ok_or(Error::<T>::NotSupportTokenType)?;
+		ensure!(v_currency_amount >= config.min_redeem_amount(), Error::<T>::BelowMinimumRedeem);
+
+		let redeemer = match redeem_creator.clone() {
+			RedeemCreator::Substrate(account_id) => account_id,
+			RedeemCreator::Ethereum(address) => Self::h160_to_account_id(&address),
+		};
 
 		// Charging fees
-		let (_, redeem_rate) = Fees::<T>::get();
-		let redeem_fee = redeem_rate.mul_floor(v_currency_amount);
+		let redeem_fee = config.redeem_fee_rate().mul_floor(v_currency_amount);
 		T::MultiCurrency::transfer(
 			v_currency_id,
 			&redeemer,
@@ -658,51 +354,106 @@ impl<T: Config> Pallet<T> {
 		// Withdraw the token from redeemer
 		T::MultiCurrency::withdraw(v_currency_id, &redeemer, v_currency_amount)?;
 
-		// Calculate the time to be locked
-		let ongoing_time_unit =
-			OngoingTimeUnit::<T>::get(currency_id).ok_or(Error::<T>::OngoingTimeUnitNotSet)?;
-		let unlock_duration =
-			UnlockDuration::<T>::get(currency_id).ok_or(Error::<T>::UnlockDurationNotFound)?;
-		let lock_to_time_unit = ongoing_time_unit
-			.add(unlock_duration)
-			.ok_or(Error::<T>::UnlockDurationNotFound)?;
+		// Calculate final_time_unit
+		let mut active_state =
+			ActiveStateByCurrency::<T>::get(currency_id).ok_or(Error::<T>::NotEnoughBalance)?;
+		let final_time_unit = active_state
+			.ongoing_time_unit()
+			.add(config.unlock_duration())
+			.ok_or(Error::<T>::CalculationOverflow)?;
+
+		let mut redeem_queue = RedeemQueueByCurrency::<T>::get(currency_id);
+		let id = active_state.next_redeem_id();
+		redeem_queue
+			.try_push(RedeemOrder {
+				id,
+				creator: redeem_creator,
+				currency: currency_id,
+				currency_amount,
+				remaining_currency_amount: currency_amount,
+				v_currency: v_currency_id,
+				v_currency_amount,
+				final_time_unit,
+				redeem_to,
+			})
+			.map_err(|_| Error::<T>::TooManyRedeems)?;
 
 		// Decrease the token pool amount
-		Self::update_token_pool(&currency_id, &currency_amount, Operation::Sub)?;
+		active_state.subtract_stake_amount(currency_amount);
+		active_state.add_unstake_amount(currency_amount);
+		active_state.add_next_redeem_id();
+		Self::update_active_state(&currency_id, active_state)?;
+		Self::update_redeem_queue(&currency_id, &redeem_queue)?;
 
-		TokenUnlockNextId::<T>::mutate(&currency_id, |next_id| -> DispatchResultWithPostInfo {
-			Self::update_unlock_ledger(
-				&redeemer,
-				&currency_id,
-				&currency_amount,
-				&next_id,
-				&lock_to_time_unit,
-				Some(redeem_type),
-				Operation::Add,
-			)?;
+		T::ChannelCommission::record_redeem_amount(v_currency_id, v_currency_amount)?;
+		T::OnRedeemSuccess::on_redeemed(
+			redeemer,
+			currency_id,
+			currency_amount,
+			v_currency_amount,
+			redeem_fee,
+		);
+		Self::deposit_event(Event::Redeemed { id });
+		Ok(())
+	}
 
-			Self::deposit_event(Event::Redeemed {
-				redeemer: redeemer.clone(),
-				currency_id,
-				v_currency_amount,
-				currency_amount,
-				redeem_fee,
-				unlock_id: *next_id,
-			});
+	pub fn do_rebond_by_redeem_id(
+		rebonder: T::AccountId,
+		currency_id: CurrencyId,
+		redeem_id: RedeemOrderId,
+	) -> DispatchResult {
+		let config =
+			ConfigurationByCurrency::<T>::get(currency_id).ok_or(Error::<T>::Unexpected)?;
+		ensure!(config.is_supported_restake(), Error::<T>::NotSupportTokenType);
 
-			// Increase the next unlock id
-			*next_id = next_id.checked_add(1).ok_or(Error::<T>::CalculationOverflow)?;
+		let mut redeem_queue = RedeemQueueByCurrency::<T>::get(currency_id);
+		let index = redeem_queue
+			.iter()
+			.position(|x| x.id == redeem_id)
+			.ok_or(Error::<T>::Unexpected)?;
 
-			T::ChannelCommission::record_redeem_amount(v_currency_id, v_currency_amount)?;
-			let extra_weight = T::OnRedeemSuccess::on_redeemed(
-				redeemer,
-				currency_id,
-				currency_amount,
-				v_currency_amount,
-				redeem_fee,
-			);
-			Ok(Some(T::WeightInfo::redeem() + extra_weight).into())
-		})
+		let redeem_order = redeem_queue.remove(index);
+		ensure!(
+			redeem_order.creator == RedeemCreator::Substrate(rebonder.clone()),
+			Error::<T>::Unexpected
+		);
+
+		let v_currency_amount = Self::get_v_currency_amount_by_currency_amount(
+			redeem_order.currency(),
+			redeem_order.v_currency(),
+			redeem_order.remaining_currency_amount(),
+		)?;
+
+		// Issue the corresponding v_currency to the user's account.
+		T::MultiCurrency::deposit(redeem_order.v_currency(), &rebonder, v_currency_amount)?;
+
+		let mut active_state =
+			ActiveStateByCurrency::<T>::get(currency_id).ok_or(Error::<T>::Unexpected)?;
+		active_state.subtract_unstake_amount(redeem_order.remaining_currency_amount());
+		active_state.add_restake_amount(redeem_order.remaining_currency_amount());
+		active_state.add_stake_amount(redeem_order.remaining_currency_amount());
+		Self::update_active_state(&currency_id, active_state)?;
+		Self::update_redeem_queue(&currency_id, &redeem_queue)?;
+
+		Self::deposit_event(Event::RebondedByUnlockId {
+			rebonder,
+			currency_id,
+			currency_amount: redeem_order.remaining_currency_amount(),
+			v_currency_amount,
+			fee: Default::default(),
+			unlock_id: redeem_id,
+		});
+		Ok(())
+	}
+
+	pub fn redeem_queue_by_account(
+		currency_id: CurrencyId,
+		account: T::AccountId,
+	) -> Vec<RedeemOrder<T::AccountId, BalanceOf<T>>> {
+		RedeemQueueByCurrency::<T>::get(currency_id)
+			.into_iter()
+			.filter(|x| x.creator == RedeemCreator::Substrate(account.clone()))
+			.collect()
 	}
 
 	pub fn incentive_pool_account() -> AccountIdOf<T> {
@@ -834,46 +585,45 @@ impl<T: Config> Pallet<T> {
 impl<T: Config> VtokenMintingOperator<CurrencyId, BalanceOf<T>, AccountIdOf<T>, TimeUnit>
 	for Pallet<T>
 {
-	fn get_token_pool(currency_id: CurrencyId) -> BalanceOf<T> {
-		TokenPool::<T>::get(currency_id)
+	fn total_stake_amount(currency_id: CurrencyId) -> BalanceOf<T> {
+		ActiveStateByCurrency::<T>::get(currency_id)
+			.map(|active_state| active_state.total_stake_amount())
+			.unwrap_or_default()
 	}
 
 	fn increase_token_pool(
 		currency_id: CurrencyId,
 		currency_amount: BalanceOf<T>,
 	) -> DispatchResult {
-		Self::update_token_pool(&currency_id, &currency_amount, Operation::Add)
+		ActiveStateByCurrency::<T>::mutate(currency_id, |active_state| -> DispatchResult {
+			let active_state = active_state.as_mut().ok_or(Error::<T>::UnlockDurationNotFound)?;
+			active_state.add_stake_amount(currency_amount);
+			Ok(())
+		})
 	}
 
 	fn decrease_token_pool(
 		currency_id: CurrencyId,
 		currency_amount: BalanceOf<T>,
 	) -> DispatchResult {
-		Self::update_token_pool(&currency_id, &currency_amount, Operation::Sub)
+		ActiveStateByCurrency::<T>::mutate(currency_id, |active_state| -> DispatchResult {
+			let active_state = active_state.as_mut().ok_or(Error::<T>::UnlockDurationNotFound)?;
+			active_state.subtract_stake_amount(currency_amount);
+			Ok(())
+		})
 	}
 
 	fn update_ongoing_time_unit(currency_id: CurrencyId, time_unit: TimeUnit) -> DispatchResult {
-		OngoingTimeUnit::<T>::mutate(currency_id, |time_unit_old| -> Result<(), Error<T>> {
-			*time_unit_old = Some(time_unit);
+		ActiveStateByCurrency::<T>::mutate(currency_id, |active_state| -> DispatchResult {
+			let active_state = active_state.as_mut().ok_or(Error::<T>::UnlockDurationNotFound)?;
+			active_state.set_ongoing_time_unit(time_unit);
 			Ok(())
-		})?;
-
-		Ok(())
+		})
 	}
 
 	fn get_ongoing_time_unit(currency_id: CurrencyId) -> Option<TimeUnit> {
-		OngoingTimeUnit::<T>::get(currency_id)
-	}
-
-	fn get_unlock_records(
-		currency_id: CurrencyId,
-		time_unit: TimeUnit,
-	) -> Option<(BalanceOf<T>, Vec<u32>)> {
-		if let Some((balance, list, _)) = TimeUnitUnlockLedger::<T>::get(&time_unit, currency_id) {
-			Some((balance, list.into_inner()))
-		} else {
-			None
-		}
+		ActiveStateByCurrency::<T>::get(currency_id)
+			.map(|active_state| active_state.ongoing_time_unit())
 	}
 
 	fn get_entrance_and_exit_accounts() -> (AccountIdOf<T>, AccountIdOf<T>) {
@@ -881,13 +631,6 @@ impl<T: Config> VtokenMintingOperator<CurrencyId, BalanceOf<T>, AccountIdOf<T>, 
 			T::EntranceAccount::get().into_account_truncating(),
 			T::ExitAccount::get().into_account_truncating(),
 		)
-	}
-
-	fn get_token_unlock_ledger(
-		currency_id: CurrencyId,
-		index: u32,
-	) -> Option<(AccountIdOf<T>, BalanceOf<T>, TimeUnit, RedeemType<AccountIdOf<T>>)> {
-		TokenUnlockLedger::<T>::get(currency_id, index)
 	}
 
 	fn get_moonbeam_parachain_id() -> u32 {
@@ -909,20 +652,22 @@ impl<T: Config> VtokenMintingInterface<AccountIdOf<T>, CurrencyIdOf<T>, BalanceO
 	}
 
 	fn redeem(
-		exchanger: AccountIdOf<T>,
+		redeemer: AccountIdOf<T>,
 		v_currency_id: CurrencyIdOf<T>,
 		v_currency_amount: BalanceOf<T>,
-	) -> DispatchResultWithPostInfo {
-		Self::do_redeem(exchanger, v_currency_id, v_currency_amount, RedeemType::Native)
+	) -> DispatchResult {
+		let redeem_creator = RedeemCreator::Substrate(redeemer.clone());
+		let redeem_to = RedeemTo::Native(redeemer);
+		Self::do_redeem(redeem_creator, v_currency_id, v_currency_amount, redeem_to)
 	}
 
 	fn slpx_redeem(
-		exchanger: AccountIdOf<T>,
+		redeem_creator: RedeemCreator<T::AccountId>,
 		v_currency_id: CurrencyIdOf<T>,
 		v_currency_amount: BalanceOf<T>,
-		redeem_type: RedeemType<AccountIdOf<T>>,
-	) -> DispatchResultWithPostInfo {
-		Self::do_redeem(exchanger, v_currency_id, v_currency_amount, redeem_type)
+		redeem_to: RedeemTo<T::AccountId>,
+	) -> DispatchResult {
+		Self::do_redeem(redeem_creator, v_currency_id, v_currency_amount, redeem_to)
 	}
 
 	fn get_v_currency_amount_by_currency_amount(
@@ -930,16 +675,18 @@ impl<T: Config> VtokenMintingInterface<AccountIdOf<T>, CurrencyIdOf<T>, BalanceO
 		v_currency_id: CurrencyIdOf<T>,
 		currency_amount: BalanceOf<T>,
 	) -> Result<BalanceOf<T>, DispatchError> {
-		let token_pool_amount = TokenPool::<T>::get(currency_id);
+		let total_stake_amount = ActiveStateByCurrency::<T>::get(currency_id)
+			.ok_or(Error::<T>::UnlockDurationNotFound)?
+			.total_stake_amount();
 		let v_currency_total_issuance = T::MultiCurrency::total_issuance(v_currency_id);
 
-		if BalanceOf::<T>::zero().eq(&token_pool_amount) {
+		if BalanceOf::<T>::zero().eq(&total_stake_amount) {
 			Ok(currency_amount)
 		} else {
 			Ok(multiply_by_rational_with_rounding(
 				currency_amount.saturated_into::<u128>(),
 				v_currency_total_issuance.saturated_into::<u128>(),
-				token_pool_amount.saturated_into::<u128>(),
+				total_stake_amount.saturated_into::<u128>(),
 				Rounding::Down,
 			)
 			.ok_or(Error::<T>::CalculationOverflow)?
@@ -959,7 +706,9 @@ impl<T: Config> VtokenMintingInterface<AccountIdOf<T>, CurrencyIdOf<T>, BalanceO
 		v_currency_id: CurrencyIdOf<T>,
 		v_currency_amount: BalanceOf<T>,
 	) -> Result<BalanceOf<T>, DispatchError> {
-		let token_pool_amount = TokenPool::<T>::get(currency_id);
+		let total_stake_amount = ActiveStateByCurrency::<T>::get(currency_id)
+			.ok_or(Error::<T>::UnlockDurationNotFound)?
+			.total_stake_amount();
 		let v_currency_total_issuance = T::MultiCurrency::total_issuance(v_currency_id);
 
 		if BalanceOf::<T>::zero().eq(&v_currency_total_issuance) {
@@ -967,7 +716,7 @@ impl<T: Config> VtokenMintingInterface<AccountIdOf<T>, CurrencyIdOf<T>, BalanceO
 		} else {
 			Ok(multiply_by_rational_with_rounding(
 				v_currency_amount.saturated_into::<u128>(),
-				token_pool_amount.saturated_into::<u128>(),
+				total_stake_amount.saturated_into::<u128>(),
 				v_currency_total_issuance.saturated_into::<u128>(),
 				Rounding::Down,
 			)
@@ -976,12 +725,10 @@ impl<T: Config> VtokenMintingInterface<AccountIdOf<T>, CurrencyIdOf<T>, BalanceO
 		}
 	}
 
-	fn get_minimums_redeem(v_currency_id: CurrencyIdOf<T>) -> BalanceOf<T> {
-		MinimumRedeem::<T>::get(v_currency_id)
-	}
-
-	fn get_token_pool(currency_id: CurrencyId) -> BalanceOf<T> {
-		TokenPool::<T>::get(currency_id)
+	fn total_stake_amount(currency_id: CurrencyId) -> BalanceOf<T> {
+		ActiveStateByCurrency::<T>::get(currency_id)
+			.map(|active_state| active_state.total_stake_amount())
+			.unwrap_or_default()
 	}
 
 	fn get_moonbeam_parachain_id() -> u32 {

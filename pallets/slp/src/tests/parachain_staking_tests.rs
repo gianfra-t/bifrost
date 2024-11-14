@@ -941,7 +941,7 @@ fn charge_host_fee_and_tune_vtoken_exchange_rate_works() {
 		));
 
 		// check token pool, should be 1000 + 1000 = 2000
-		assert_eq!(<Runtime as Config>::VtokenMinting::get_token_pool(BNC), 2000);
+		assert_eq!(<Runtime as Config>::VtokenMinting::total_stake_amount(BNC), 2000);
 		// check vBNC issuance, should be 1000 + 20% * 1000 = 1200
 		assert_eq!(Currencies::total_issuance(VBNC), 1200);
 	});

@@ -27,7 +27,7 @@ use bifrost_primitives::{
 	currency::{BNC, MOVR, VFIL},
 	AstarChainId, AstarEvmChainId, Balance, BifrostKusamaChainId, CurrencyId, CurrencyIdMapping,
 	HydrationChainId, InterlayChainId, MantaChainId, MoonbeamEvmChainId, MoonriverEvmChainId,
-	RedeemType, SlpxOperator, TokenInfo, VtokenMintingInterface, GLMR,
+	RedeemCreator, RedeemTo, RedeemType, SlpxOperator, TokenInfo, VtokenMintingInterface, GLMR,
 };
 use cumulus_primitives_core::ParaId;
 use ethereum::TransactionAction;
@@ -1122,21 +1122,25 @@ impl<T: Config> Pallet<T> {
 				.map_err(|_| Error::<T>::ErrorTransferTo)?;
 			},
 			OrderType::Redeem => {
-				let redeem_type = match order.target_chain.clone() {
+				let redeem_to = match order.target_chain.clone() {
 					TargetChain::Astar(receiver) => {
 						let receiver = Self::h160_to_account_id(&receiver);
-						RedeemType::Astar(receiver)
+						RedeemTo::Astar(receiver)
 					},
-					TargetChain::Moonbeam(receiver) => RedeemType::Moonbeam(receiver),
-					TargetChain::Hydradx(receiver) => RedeemType::Hydradx(receiver),
-					TargetChain::Interlay(receiver) => RedeemType::Interlay(receiver),
-					TargetChain::Manta(receiver) => RedeemType::Manta(receiver),
+					TargetChain::Moonbeam(receiver) => RedeemTo::Moonbeam(receiver),
+					TargetChain::Hydradx(receiver) => RedeemTo::Hydradx(receiver),
+					TargetChain::Interlay(receiver) => RedeemTo::Interlay(receiver),
+					TargetChain::Manta(receiver) => RedeemTo::Manta(receiver),
+				};
+				let redeem_creator = match order.source_chain_caller.clone() {
+					OrderCaller::Evm(h160) => RedeemCreator::Ethereum(h160),
+					OrderCaller::Substrate(account_id) => RedeemCreator::Substrate(account_id),
 				};
 				T::VtokenMintingInterface::slpx_redeem(
-					order.derivative_account.clone(),
+					redeem_creator,
 					order.currency_id,
 					currency_amount,
-					redeem_type,
+					redeem_to,
 				)
 				.map_err(|_| Error::<T>::ErrorVtokenMiting)?;
 			},
@@ -1201,7 +1205,8 @@ impl<T: Config> Pallet<T> {
 		let configuration = XcmEthereumCallConfiguration::<T>::get();
 		if let Some(mut config) = configuration {
 			let currency_id = currency_list[0];
-			let staking_currency_amount = T::VtokenMintingInterface::get_token_pool(currency_id);
+			let staking_currency_amount =
+				T::VtokenMintingInterface::total_stake_amount(currency_id);
 			let v_currency_id =
 				currency_id.to_vtoken().map_err(|_| Error::<T>::ErrorConvertVtoken)?;
 			let v_currency_total_supply = T::MultiCurrency::total_issuance(v_currency_id);

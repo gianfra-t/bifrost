@@ -311,7 +311,7 @@ impl<T: Config> Pallet<T> {
 		token_amount: Balance,
 	) -> Result<Balance, Error<T>> {
 		let vtoken_total_issuance = T::MultiCurrency::total_issuance(vtoken_currency_id);
-		let token_pool_amount = T::VtokenMinting::get_token_pool(currency_id);
+		let token_pool_amount = T::VtokenMinting::total_stake_amount(currency_id);
 		// vtoken_amount / vtoken_total_issuance = token_amount / token_pool_amount
 		// vtoken_amount = token_amount * vtoken_total_issuance / token_pool_amount
 		let vtoken_amount = multiply_by_rational_with_rounding(

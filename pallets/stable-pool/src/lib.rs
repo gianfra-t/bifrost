@@ -416,7 +416,7 @@ impl<T: Config> Pallet<T> {
 				return Some((
 					token_in,
 					T::MultiCurrency::total_issuance(token_in).into(),
-					T::VtokenMinting::get_token_pool(token_out).into(),
+					T::VtokenMinting::total_stake_amount(token_out).into(),
 					hardcap,
 				));
 			}
@@ -425,7 +425,7 @@ impl<T: Config> Pallet<T> {
 				return Some((
 					token_out,
 					T::MultiCurrency::total_issuance(token_out).into(),
-					T::VtokenMinting::get_token_pool(token_in).into(),
+					T::VtokenMinting::total_stake_amount(token_in).into(),
 					hardcap,
 				));
 			}

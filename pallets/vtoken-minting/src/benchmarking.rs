@@ -138,7 +138,7 @@ benchmarks! {
 		assert_ok!(VtokenMinting::<T>::mint(RawOrigin::Signed(caller.clone()).into(), KSM, mint_amount,BoundedVec::default(), None));
 		assert_ok!(VtokenMinting::<T>::redeem(RawOrigin::Signed(caller.clone()).into(), VKSM, redeem_amount));
 		assert_ok!(VtokenMinting::<T>::add_support_rebond_token(T::ControlOrigin::try_successful_origin().map_err(|_| BenchmarkError::Weightless)?, KSM));
-		let unlock_id:UnlockId = 0;
+		let unlock_id:RedeemOrderId = 0;
 	}: _(RawOrigin::Signed(caller), KSM, unlock_id)
 
 	on_initialize {
@@ -224,7 +224,7 @@ benchmarks! {
 
 	impl_benchmark_test_suite!(
 	VtokenMinting,
-	crate::mock::ExtBuilder::default().one_hundred_for_alice_n_bob().build(),
+	crate::mock::ExtBuilder::default().setup_funds().build(),
 	crate::mock::Runtime,
 );
 }

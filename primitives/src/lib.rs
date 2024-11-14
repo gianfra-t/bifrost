@@ -46,6 +46,8 @@ pub mod traits;
 pub use crate::traits::*;
 pub mod time_unit;
 pub use crate::time_unit::*;
+pub mod vtoken_minting;
+pub use crate::vtoken_minting::*;
 
 #[cfg(test)]
 mod tests;

@@ -79,11 +79,9 @@ mod migration;
 pub mod weights;
 use bb_bnc::traits::BbBNCInterface;
 use bifrost_asset_registry::AssetIdMaps;
+use bifrost_primitives::VtokenMintingInterface;
 pub use bifrost_primitives::{
-	traits::{
-		CheckSubAccount, FarmingInfo, VtokenMintingInterface, VtokenMintingOperator,
-		XcmDestWeightAndFeeHandler,
-	},
+	traits::{CheckSubAccount, FarmingInfo, XcmDestWeightAndFeeHandler},
 	AccountId, Amount, AssetIds, Balance, BlockNumber, CurrencyId, CurrencyIdMapping,
 	DistributionId, Liquidity, Moment, Nonce, ParaId, PoolId, Price, Rate, Ratio,
 	RpcContributionStatus, Shortfall, TimeUnit, TokenSymbol, DOT_TOKEN_ID, GLMR_TOKEN_ID,
@@ -1837,7 +1835,10 @@ pub mod migrations {
 	use super::*;
 
 	/// Unreleased migrations. Add new ones here:
-	pub type Unreleased = pallet_xcm::migration::MigrateToLatestXcmVersion<Runtime>;
+	pub type Unreleased = (
+		pallet_xcm::migration::MigrateToLatestXcmVersion<Runtime>,
+		bifrost_vtoken_minting::migration::v1::MigrateToV1<Runtime>,
+	);
 }
 
 /// Executive: handles dispatch to the various modules.

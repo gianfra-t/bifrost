@@ -664,7 +664,7 @@ pub mod pallet {
 				current_block_number >= last_update_block_number + update_interval,
 				Error::<T>::UpdateIntervalTooShort
 			);
-			let pool_token_amount = T::VtokenMinting::get_token_pool(currency_id);
+			let pool_token_amount = T::VtokenMinting::total_stake_amount(currency_id);
 			let max_amount = max_update_permill.mul_floor(pool_token_amount);
 			ensure!(
 				amount <= max_amount || max_amount == 0,
