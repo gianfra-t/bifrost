@@ -101,10 +101,6 @@ pub fn bifrost_polkadot_genesis(
 		"parachainInfo": {
 			"parachainId": id
 		},
-		"collatorSelection": {
-			"invulnerables": invulnerables.iter().cloned().map(|(acc, _)| acc).collect::<Vec<_>>(),
-			"candidacyBond": 0
-		},
 		"session": {
 			"keys": invulnerables
 				.iter()
@@ -141,6 +137,18 @@ pub fn bifrost_polkadot_genesis(
 		// EVM compatibility
 		"evmChainId": { "chainId": 996u64 },
 		"dynamicFee": { "minGasPrice": U256::from(560174200u64) },
+		"parachainStaking": {
+			"candidates": candidates
+				.iter()
+				.cloned()
+				.map(|(account, _, bond)| (account, bond))
+				.collect::<Vec<_>>(),
+			"delegations": delegations,
+			"inflationConfig": inflation_config(),
+			"collatorCommission": COLLATOR_COMMISSION,
+			"parachainBondReservePercent": PARACHAIN_BOND_RESERVE_PERCENT,
+			"blocksPerRound": BLOCKS_PER_ROUND,
+		},
 		"evm": { "accounts": evm_accounts },
 	})
 }
