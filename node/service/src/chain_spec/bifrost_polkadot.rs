@@ -17,6 +17,8 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 use crate::chain_spec::{get_account_id_from_seed, get_from_seed, RelayExtensions};
+use bifrost_kusama_runtime::constants::currency::Perbill;
+use bifrost_parachain_staking::{InflationInfo, Range};
 use bifrost_polkadot_runtime::{
 	constants::currency::DOLLARS, AccountId, Balance, BlockNumber, SS58Prefix,
 };
@@ -26,7 +28,7 @@ use bifrost_primitives::{
 	CurrencyId::*,
 	TokenInfo, TokenSymbol, ASTR, BNC, DOT, DOT_TOKEN_ID, DOT_U, FIL, GLMR, MANTA,
 };
-use bifrost_runtime_common::AuraId;
+use bifrost_runtime_common::{constants::time::HOURS, AuraId};
 use cumulus_primitives_core::ParaId;
 use fp_evm::GenesisAccount;
 use frame_benchmarking::{account, whitelisted_caller};
@@ -34,7 +36,7 @@ use hex_literal::hex;
 use sc_chain_spec::Properties;
 use sc_service::ChainType;
 use sp_core::{crypto::UncheckedInto, sr25519, H160, U256};
-use sp_runtime::FixedU128;
+use sp_runtime::{FixedU128, Percent};
 use std::{collections::BTreeMap, str::FromStr};
 
 const DEFAULT_PROTOCOL_ID: &str = "bifrost_polkadot";
@@ -45,6 +47,35 @@ pub type ChainSpec = sc_service::GenericChainSpec<RelayExtensions>;
 #[allow(non_snake_case)]
 pub fn ENDOWMENT() -> u128 {
 	1_000_000 * DOLLARS
+}
+
+const COLLATOR_COMMISSION: Perbill = Perbill::from_percent(10);
+const PARACHAIN_BOND_RESERVE_PERCENT: Percent = Percent::from_percent(0);
+const BLOCKS_PER_ROUND: u32 = 2 * HOURS;
+
+pub fn inflation_config() -> InflationInfo<Balance> {
+	fn to_round_inflation(annual: Range<Perbill>) -> Range<Perbill> {
+		use bifrost_parachain_staking::inflation::{
+			perbill_annual_to_perbill_round, BLOCKS_PER_YEAR,
+		};
+		perbill_annual_to_perbill_round(
+			annual,
+			// rounds per year
+			BLOCKS_PER_YEAR / BLOCKS_PER_ROUND,
+		)
+	}
+	let annual = Range {
+		min: Perbill::from_percent(4),
+		ideal: Perbill::from_percent(5),
+		max: Perbill::from_percent(5),
+	};
+	InflationInfo {
+		// staking expectations
+		expect: Range { min: 100_000 * DOLLARS, ideal: 200_000 * DOLLARS, max: 500_000 * DOLLARS },
+		// annual inflation
+		annual,
+		round: to_round_inflation(annual),
+	}
 }
 
 fn bifrost_polkadot_properties() -> Properties {
@@ -69,7 +100,8 @@ fn bifrost_polkadot_properties() -> Properties {
 }
 
 pub fn bifrost_polkadot_genesis(
-	invulnerables: Vec<(AccountId, AuraId)>,
+	candidates: Vec<(AccountId, AuraId, Balance)>,
+	delegations: Vec<(AccountId, AccountId, Balance)>,
 	balances: Vec<(AccountId, Balance)>,
 	vestings: Vec<(AccountId, BlockNumber, BlockNumber, Balance)>,
 	id: ParaId,
@@ -102,10 +134,10 @@ pub fn bifrost_polkadot_genesis(
 			"parachainId": id
 		},
 		"session": {
-			"keys": invulnerables
+			"keys": candidates
 				.iter()
 				.cloned()
-				.map(|(acc, aura)| {
+				.map(|(acc, aura, _)| {
 					(
 						acc.clone(),                                            // account id
 						acc,                                                    // validator id
@@ -247,9 +279,15 @@ pub fn local_testnet_config() -> ChainSpec {
 			(
 				get_account_id_from_seed::<sr25519::Public>("Alice"),
 				get_from_seed::<AuraId>("Alice"),
+				ENDOWMENT() / 4,
 			),
-			(get_account_id_from_seed::<sr25519::Public>("Bob"), get_from_seed::<AuraId>("Bob")),
+			(
+				get_account_id_from_seed::<sr25519::Public>("Bob"),
+				get_from_seed::<AuraId>("Bob"),
+				ENDOWMENT() / 4,
+			),
 		],
+		vec![],
 		balances,
 		vec![],
 		BifrostPolkadotChainId::get().into(),
@@ -360,9 +398,15 @@ pub fn dev_config() -> ChainSpec {
 			(
 				get_account_id_from_seed::<sr25519::Public>("Alice"),
 				get_from_seed::<AuraId>("Alice"),
+				ENDOWMENT() / 4,
 			),
-			(get_account_id_from_seed::<sr25519::Public>("Bob"), get_from_seed::<AuraId>("Bob")),
+			(
+				get_account_id_from_seed::<sr25519::Public>("Bob"),
+				get_from_seed::<AuraId>("Bob"),
+				ENDOWMENT() / 4,
+			),
 		],
+		vec![],
 		balances,
 		vec![],
 		BifrostPolkadotChainId::get().into(),
@@ -380,30 +424,34 @@ pub fn dev_config() -> ChainSpec {
 }
 
 pub fn paseo_config() -> ChainSpec {
-	let invulnerables: Vec<(AccountId, AuraId)> = vec![
+	let invulnerables: Vec<(AccountId, AuraId, Balance)> = vec![
 		(
 			// e2s2dTSWe9kHebF2FCbPGbXftDT7fY5AMDfib3j86zSi3v7
 			hex!["66204aeda74f07f77a4b6945681296763706f98d0f8aebb1b9ccdf6e9b7ac13f"].into(),
 			hex!["66204aeda74f07f77a4b6945681296763706f98d0f8aebb1b9ccdf6e9b7ac13f"]
 				.unchecked_into(),
+			ENDOWMENT(),
 		),
 		(
 			// fFjUFbokagaDRQUDzVhDcMZQaDwQvvha74RMZnyoSWNpiBQ
 			hex!["9c2d45edb30d4bf0c285d6809e28c55e871f10578c5a3ea62da152d03761d266"].into(),
 			hex!["9c2d45edb30d4bf0c285d6809e28c55e871f10578c5a3ea62da152d03761d266"]
 				.unchecked_into(),
+			ENDOWMENT(),
 		),
 		(
 			// fBAbVJAsbWsKTedTVYGrBB3Usm6Vx635z1N9PX2tZ2boT37
 			hex!["98b19fa5a3e98f693b7440de07b4744834ff0072cb704f1c6e33791953ac4924"].into(),
 			hex!["98b19fa5a3e98f693b7440de07b4744834ff0072cb704f1c6e33791953ac4924"]
 				.unchecked_into(),
+			ENDOWMENT(),
 		),
 		(
 			// c9eHvgbxTFzijvY3AnAKiRTHhi2hzS5SLCPzCkb4jP79MLu
 			hex!["12d3ab675d6503279133898efe246a63fdc8be685cc3f7bce079aac064108a7a"].into(),
 			hex!["12d3ab675d6503279133898efe246a63fdc8be685cc3f7bce079aac064108a7a"]
 				.unchecked_into(),
+			ENDOWMENT(),
 		),
 	];
 
@@ -450,6 +498,7 @@ pub fn paseo_config() -> ChainSpec {
 	.with_chain_type(ChainType::Live)
 	.with_genesis_config_patch(bifrost_polkadot_genesis(
 		invulnerables,
+		vec![],
 		balances,
 		vec![],
 		BifrostPolkadotChainId::get().into(),
@@ -466,30 +515,34 @@ pub fn paseo_config() -> ChainSpec {
 	.build()
 }
 pub fn chainspec_config() -> ChainSpec {
-	let invulnerables: Vec<(AccountId, AuraId)> = vec![
+	let invulnerables: Vec<(AccountId, AuraId, Balance)> = vec![
 		(
 			// dpEZwz5nHxEjQXcm3sjy6NTz83EGcBRXMBSyuuWSguiVGJB
 			hex!["5c7e9ccd1045cac7f8c5c77a79c87f44019d1dda4f5032713bda89c5d73cb36b"].into(),
 			hex!["5c7e9ccd1045cac7f8c5c77a79c87f44019d1dda4f5032713bda89c5d73cb36b"]
 				.unchecked_into(),
+			ENDOWMENT(),
 		),
 		(
 			// duNwrtscWpfuTzRkjtt431kUj1gsfwbPi1bzdQL4cmk9QAa
 			hex!["606b0aad375ae1715fbe6a07315136a8e9c1c84a91230f6a0c296c2953581335"].into(),
 			hex!["606b0aad375ae1715fbe6a07315136a8e9c1c84a91230f6a0c296c2953581335"]
 				.unchecked_into(),
+			ENDOWMENT(),
 		),
 		(
 			// gPQG97HPe54fJpLoFePwm3fxdJaU2VV71hYbqd4RJcNeQfe
 			hex!["ce42cea2dd0d4ac87ccdd5f0f2e1010955467f5a37587cf6af8ee2b4ba781034"].into(),
 			hex!["ce42cea2dd0d4ac87ccdd5f0f2e1010955467f5a37587cf6af8ee2b4ba781034"]
 				.unchecked_into(),
+			ENDOWMENT(),
 		),
 		(
 			// frYfsZhdVuG6Ap6AyJQLSHVqtKmUyqxo6ohnrmGTDk2neXK
 			hex!["b6ba81e73bd39203e006fc99cc1e41976745de2ea2007bf62ed7c9a48ccc5b1d"].into(),
 			hex!["b6ba81e73bd39203e006fc99cc1e41976745de2ea2007bf62ed7c9a48ccc5b1d"]
 				.unchecked_into(),
+			ENDOWMENT(),
 		),
 	];
 
@@ -509,6 +562,7 @@ pub fn chainspec_config() -> ChainSpec {
 	.with_chain_type(ChainType::Live)
 	.with_genesis_config_patch(bifrost_polkadot_genesis(
 		invulnerables,
+		vec![],
 		vec![],
 		vec![],
 		BifrostPolkadotChainId::get().into(),
