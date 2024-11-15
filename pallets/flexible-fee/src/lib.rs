@@ -371,6 +371,11 @@ impl<T: Config> Pallet<T> {
 		let mut fee_currency_list: Vec<CurrencyId> =
 			UniversalFeeCurrencyOrderList::<T>::get().into_iter().collect();
 
+		// If the universal fee currency list is empty, set the default list
+		if fee_currency_list.is_empty() {
+			fee_currency_list = vec![BNC]
+		}
+
 		// Get user default fee currency
 		if let Some(default_fee_currency) = UserDefaultFeeCurrency::<T>::get(&account_id) {
 			if let Some(index) = fee_currency_list.iter().position(|&c| c == default_fee_currency) {
