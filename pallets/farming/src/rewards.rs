@@ -113,6 +113,37 @@ where
 			withdraw_limit_count,
 		}
 	}
+	pub fn new_gauge(
+		keeper: AccountIdOf,
+		reward_issuer: AccountIdOf,
+		tokens_proportion: BTreeMap<CurrencyIdOf, Perbill>,
+		basic_token: (CurrencyIdOf, Perbill),
+		basic_rewards: BTreeMap<CurrencyIdOf, BalanceOf>,
+		gauge: Option<PoolId>,
+		min_deposit_to_start: BalanceOf,
+		after_block_to_start: BlockNumberFor,
+		withdraw_limit_time: BlockNumberFor,
+		claim_limit_time: BlockNumberFor,
+		withdraw_limit_count: u8,
+	) -> Self {
+		Self {
+			tokens_proportion,
+			basic_token,
+			total_shares: Default::default(),
+			basic_rewards,
+			rewards: BTreeMap::new(),
+			state: PoolState::Ongoing,
+			keeper,
+			reward_issuer,
+			gauge,
+			block_startup: None,
+			min_deposit_to_start,
+			after_block_to_start,
+			withdraw_limit_time,
+			claim_limit_time,
+			withdraw_limit_count,
+		}
+	}
 }
 
 #[derive(Encode, Decode, Copy, Clone, Eq, PartialEq, RuntimeDebug, TypeInfo)]
@@ -295,12 +326,12 @@ impl<T: Config> Pallet<T> {
 	}
 
 	pub fn claim_rewards(who: &T::AccountId, pool: PoolId) -> DispatchResult {
-		if let Some(_) = GaugePoolInfos::<T>::get(pool) {
-			let pool_info = PoolInfos::<T>::get(pool).ok_or(Error::<T>::PoolDoesNotExist)?;
-			let share_info = SharesAndWithdrawnRewards::<T>::get(pool, who)
-				.ok_or(Error::<T>::ShareInfoNotExists)?;
-			T::BbBNC::get_rewards(pool, who, Some((share_info.share, pool_info.total_shares)))?;
-		}
+		// if let Some(_) = GaugePoolInfos::<T>::get(pool) {
+		// 	let pool_info = PoolInfos::<T>::get(pool).ok_or(Error::<T>::PoolDoesNotExist)?;
+		// 	let share_info = SharesAndWithdrawnRewards::<T>::get(pool, who)
+		// 		.ok_or(Error::<T>::ShareInfoNotExists)?;
+		// 	T::BbBNC::get_rewards(pool, who, Some((share_info.share, pool_info.total_shares)))?;
+		// }
 		SharesAndWithdrawnRewards::<T>::mutate_exists(
 			pool,
 			who,
@@ -364,6 +395,9 @@ impl<T: Config> Pallet<T> {
 										account_to_send = T::TreasuryAccount::get();
 									}
 								}
+								let from_balance = T::MultiCurrency::total_balance(*reward_currency, &pool_info.reward_issuer);
+
+								log::debug!("from_balance {:?},reward_to_withdraw{:?}total_reward{:?}",from_balance,reward_to_withdraw,total_reward);
 								// pay reward to `who`
 								T::MultiCurrency::transfer(
 									*reward_currency,
