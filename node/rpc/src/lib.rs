@@ -73,8 +73,6 @@ pub struct FullDeps<C, P> {
 	pub client: Arc<C>,
 	/// Transaction pool instance.
 	pub pool: Arc<P>,
-	/// Whether to deny unsafe calls
-	pub deny_unsafe: DenyUnsafe,
 }
 
 /// Full client dependencies.
@@ -83,8 +81,6 @@ pub struct FullDepsPolkadot<C, P> {
 	pub client: Arc<C>,
 	/// Transaction pool instance.
 	pub pool: Arc<P>,
-	/// Whether to deny unsafe calls
-	pub deny_unsafe: DenyUnsafe,
 	/// Manual seal command sink
 	pub command_sink: Option<mpsc::Sender<EngineCommand<Hash>>>,
 }
@@ -118,9 +114,9 @@ where
 	P: TransactionPool + Sync + Send + 'static,
 {
 	let mut module = RpcExtension::new(());
-	let FullDeps { client, pool, deny_unsafe } = deps;
+	let FullDeps { client, pool } = deps;
 
-	module.merge(System::new(client.clone(), pool.clone(), deny_unsafe).into_rpc())?;
+	module.merge(System::new(client.clone(), pool.clone()).into_rpc())?;
 	module.merge(TransactionPayment::new(client.clone()).into_rpc())?;
 
 	module.merge(FarmingRpc::new(client.clone()).into_rpc())?;
@@ -161,9 +157,9 @@ where
 	P: TransactionPool + Sync + Send + 'static,
 {
 	let mut module = RpcExtension::new(());
-	let FullDepsPolkadot { client, pool, deny_unsafe, command_sink } = deps;
+	let FullDepsPolkadot { client, pool, command_sink } = deps;
 
-	module.merge(System::new(client.clone(), pool.clone(), deny_unsafe).into_rpc())?;
+	module.merge(System::new(client.clone(), pool.clone()).into_rpc())?;
 	module.merge(TransactionPayment::new(client.clone()).into_rpc())?;
 
 	module.merge(FarmingRpc::new(client.clone()).into_rpc())?;

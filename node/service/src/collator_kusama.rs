@@ -90,13 +90,14 @@ pub fn new_partial(
 		.transpose()?;
 
 	let heap_pages = config
+		.executor
 		.default_heap_pages
 		.map_or(DEFAULT_HEAP_ALLOC_STRATEGY, |h| HeapAllocStrategy::Static { extra_pages: h as _ });
 
 	let executor = sc_executor::WasmExecutor::<HostFunctions>::builder()
-		.with_execution_method(config.wasm_method)
-		.with_max_runtime_instances(config.max_runtime_instances)
-		.with_runtime_cache_size(config.runtime_cache_size)
+		.with_execution_method(config.executor.wasm_method)
+		.with_max_runtime_instances(config.executor.max_runtime_instances)
+		.with_runtime_cache_size(config.executor.runtime_cache_size)
 		.with_onchain_heap_alloc_strategy(heap_pages)
 		.with_offchain_heap_alloc_strategy(heap_pages)
 		.build();
@@ -235,7 +236,6 @@ fn start_consensus(
 		block_import,
 		para_client: client,
 		relay_client: relay_chain_interface,
-		sync_oracle,
 		keystore,
 		collator_key,
 		para_id,
@@ -248,10 +248,9 @@ fn start_consensus(
 		collation_request_receiver: None,
 	};
 
-	let fut =
-		basic_aura::run::<Block, sp_consensus_aura::sr25519::AuthorityPair, _, _, _, _, _, _, _>(
-			params,
-		);
+	let fut = basic_aura::run::<Block, sp_consensus_aura::sr25519::AuthorityPair, _, _, _, _, _, _>(
+		params,
+	);
 	task_manager.spawn_essential_handle().spawn("aura", None, fut);
 
 	Ok(())
@@ -299,8 +298,10 @@ where
 	let prometheus_registry = parachain_config.prometheus_registry().cloned();
 	let transaction_pool = params.transaction_pool.clone();
 	let import_queue_service = params.import_queue.service();
-	let net_config =
-		sc_network::config::FullNetworkConfiguration::<_, _, Net>::new(&parachain_config.network);
+	let net_config = sc_network::config::FullNetworkConfiguration::<_, _, Net>::new(
+		&parachain_config.network,
+		parachain_config.prometheus_config.as_ref().map(|cfg| cfg.registry.clone()),
+	);
 	let (network, system_rpc_tx, tx_handler_controller, start_network, sync_service) =
 		build_network(BuildNetworkParams {
 			parachain_config: &parachain_config,
@@ -342,12 +343,9 @@ where
 		let client = client.clone();
 		let transaction_pool = transaction_pool.clone();
 
-		Box::new(move |deny_unsafe, _| {
-			let deps = crate::rpc::FullDeps {
-				client: client.clone(),
-				pool: transaction_pool.clone(),
-				deny_unsafe,
-			};
+		Box::new(move |_| {
+			let deps =
+				crate::rpc::FullDeps { client: client.clone(), pool: transaction_pool.clone() };
 			crate::rpc::create_full(deps).map_err(Into::into)
 		})
 	};
