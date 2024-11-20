@@ -130,9 +130,6 @@ where
 			*id = id.checked_add(1).ok_or(ArithmeticError::Overflow)?;
 			Ok(())
 		})?;
-
-		let controller = T::GaugeRewardIssuer::get().into_sub_account_truncating(pid);
-		T::BbBNC::set_incentive(pid, Some(max_block), Some(controller));
 		Ok(())
 	}
 
@@ -251,16 +248,5 @@ where
 			},
 		};
 		Ok(result_vec)
-	}
-
-	pub fn update_reward(who: &AccountIdOf<T>, pid: PoolId) -> Result<(), DispatchError> {
-		let pool_info = PoolInfos::<T>::get(pid).ok_or(Error::<T>::PoolDoesNotExist)?;
-		let share_info =
-			SharesAndWithdrawnRewards::<T>::get(pid, who).ok_or(Error::<T>::ShareInfoNotExists)?;
-		if T::BbBNC::balance_of(who, None)? == BalanceOf::<T>::zero() {
-			return Ok(());
-		}
-		T::BbBNC::update_reward(pid, Some(who), Some((share_info.share, pool_info.total_shares)))?;
-		Ok(())
 	}
 }

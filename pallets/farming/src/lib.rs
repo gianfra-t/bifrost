@@ -429,16 +429,6 @@ pub mod pallet {
 				_ => (),
 			});
 
-			GaugePoolInfos::<T>::iter().for_each(|(gid, gauge_pool_info)| {
-				match gauge_pool_info.gauge_state {
-					GaugeState::Bonded => {
-						let rewards = gauge_pool_info.gauge_basic_rewards.into_keys().collect();
-						T::BbBNC::auto_notify_reward(gid, n, rewards).unwrap_or_default();
-					},
-					_ => (),
-				}
-			});
-
 			if n == BoostPoolInfos::<T>::get().end_round {
 				Self::end_boost_round_inner();
 				Self::auto_start_boost_round();
@@ -683,7 +673,6 @@ pub mod pallet {
 					Self::add_share(&exchanger, gauge_pid, &mut gauge_pool_info, gauge_new_value);
 				}
 			}
-			Self::update_reward(&exchanger, pid)?;
 
 			Self::deposit_event(Event::Deposited { who: exchanger, pid, add_value });
 			Ok(())
@@ -731,11 +720,6 @@ pub mod pallet {
 					.ok_or(ArithmeticError::Overflow)?;
 				if let Some(share_info) = SharesAndWithdrawnRewards::<T>::get(gauge_pid, &exchanger)
 				{
-					// let a = share_info.share.saturating_sub(gauge_new_value);
-					// let gauge_new_value = T::BbBNC::balance_of(&exchanger, None)?
-					// .checked_mul(&add_value)
-					// .ok_or(ArithmeticError::Overflow)?;
-
 					match gauge_new_value.cmp(&share_info.share) {
 						Ordering::Less => {
 							let gauge_remove_value = share_info.share - gauge_new_value;
@@ -756,10 +740,8 @@ pub mod pallet {
 							);
 						},
 					};
-					Self::update_reward(&exchanger, gauge_pid)?;
 				}
 			}
-			Self::update_reward(&exchanger, pid)?;
 
 			Self::deposit_event(Event::Withdrawn { who: exchanger, pid, remove_value });
 			Ok(())
@@ -1034,24 +1016,6 @@ pub mod pallet {
 			PoolInfos::<T>::insert(pid, &pool_info);
 
 			Self::deposit_event(Event::FarmingPoolEdited { pid });
-			Ok(())
-		}
-
-		/// Withdraw the rewards from the gauge pool.
-		///
-		/// - `gid`: The gauge pool id.
-		#[pallet::call_index(12)]
-		#[pallet::weight(T::WeightInfo::gauge_withdraw())]
-		pub fn gauge_withdraw(origin: OriginFor<T>, gid: PoolId) -> DispatchResult {
-			// Check origin
-			let who = ensure_signed(origin)?;
-
-			let pool_info = PoolInfos::<T>::get(gid).ok_or(Error::<T>::PoolDoesNotExist)?;
-			let share_info = SharesAndWithdrawnRewards::<T>::get(gid, &who)
-				.ok_or(Error::<T>::ShareInfoNotExists)?;
-			T::BbBNC::get_rewards(gid, &who, Some((share_info.share, pool_info.total_shares)))?;
-
-			Self::deposit_event(Event::GaugeWithdrawn { who, gid });
 			Ok(())
 		}
 
