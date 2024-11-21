@@ -46,7 +46,10 @@ mod benchmarks {
 		));
 
 		#[extrinsic_call]
-		_(origin, CurrencyId::Token(TokenSymbol::DOT));
+		_(
+			origin as <T as frame_system::Config>::RuntimeOrigin,
+			CurrencyId::Token(TokenSymbol::DOT),
+		);
 
 		Ok(())
 	}
@@ -57,7 +60,12 @@ mod benchmarks {
 			T::ControlOrigin::try_successful_origin().map_err(|_| BenchmarkError::Weightless)?;
 
 		#[extrinsic_call]
-		_(origin, CurrencyId::Token(TokenSymbol::DOT), 100u32.into(), 100u32.into());
+		_(
+			origin as <T as frame_system::Config>::RuntimeOrigin,
+			CurrencyId::Token(TokenSymbol::DOT),
+			100u32.into(),
+			100u32.into(),
+		);
 
 		Ok(())
 	}
@@ -69,7 +77,11 @@ mod benchmarks {
 		let caller = whitelisted_caller();
 
 		#[extrinsic_call]
-		_(origin, CurrencyId::Token(TokenSymbol::DOT), caller);
+		_(
+			origin as <T as frame_system::Config>::RuntimeOrigin,
+			CurrencyId::Token(TokenSymbol::DOT),
+			caller,
+		);
 
 		Ok(())
 	}
@@ -87,7 +99,11 @@ mod benchmarks {
 		));
 
 		#[extrinsic_call]
-		_(origin, CurrencyId::Token(TokenSymbol::DOT), test_account);
+		_(
+			origin as <T as frame_system::Config>::RuntimeOrigin,
+			CurrencyId::Token(TokenSymbol::DOT),
+			test_account,
+		);
 
 		Ok(())
 	}
@@ -119,9 +135,7 @@ mod benchmarks {
 
 		#[extrinsic_call]
 		_(
-			<frame_system::RawOrigin<<T as frame_system::Config>::AccountId> as Into<
-				T::RuntimeOrigin,
-			>>::into(RawOrigin::Signed(test_account.clone())),
+			RawOrigin::Signed(test_account.clone()),
 			CurrencyId::Token(TokenSymbol::DOT),
 			account("seed", 1, 1),
 			location,
@@ -177,9 +191,7 @@ mod benchmarks {
 
 		#[extrinsic_call]
 		_(
-			<frame_system::RawOrigin<<T as frame_system::Config>::AccountId> as Into<
-				T::RuntimeOrigin,
-			>>::into(RawOrigin::Signed(test_account)),
+			RawOrigin::Signed(test_account),
 			CurrencyId::Token(TokenSymbol::DOT),
 			BalanceOf::<T>::unique_saturated_from(100_000_000_000u128),
 		);
@@ -228,7 +240,12 @@ mod benchmarks {
 		});
 
 		#[extrinsic_call]
-		_(origin, CurrencyId::Token(TokenSymbol::DOT), location2, test_account);
+		_(
+			origin as <T as frame_system::Config>::RuntimeOrigin,
+			CurrencyId::Token(TokenSymbol::DOT),
+			location2,
+			test_account,
+		);
 
 		Ok(())
 	}
