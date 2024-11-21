@@ -60,8 +60,8 @@ impl<T: frame_system::Config> bifrost_flexible_fee::WeightInfo for BifrostWeight
 		// Proof Size summary in bytes:
 		//  Measured:  `0`
 		//  Estimated: `0`
-		// Minimum execution time: 4_503 nanoseconds.
-		Weight::from_parts(4_716_000, 0)
+		// Minimum execution time: 4_347 nanoseconds.
+		Weight::from_parts(4_689_000, 0)
 			.saturating_add(T::DbWeight::get().writes(1))
 	}
 	// Storage: `FlexibleFee::UniversalFeeCurrencyOrderList` (r:0 w:1)
@@ -70,8 +70,8 @@ impl<T: frame_system::Config> bifrost_flexible_fee::WeightInfo for BifrostWeight
 		// Proof Size summary in bytes:
 		//  Measured:  `0`
 		//  Estimated: `0`
-		// Minimum execution time: 3_781 nanoseconds.
-		Weight::from_parts(4_058_000, 0)
+		// Minimum execution time: 3_737 nanoseconds.
+		Weight::from_parts(3_920_000, 0)
 			.saturating_add(T::DbWeight::get().writes(1))
 	}
 }

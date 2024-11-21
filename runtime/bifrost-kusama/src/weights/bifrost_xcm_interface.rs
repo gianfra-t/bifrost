@@ -60,8 +60,8 @@ impl<T: frame_system::Config> bifrost_xcm_interface::WeightInfo for BifrostWeigh
 		// Proof Size summary in bytes:
 		//  Measured:  `109`
 		//  Estimated: `3574`
-		// Minimum execution time: 19_356 nanoseconds.
-		Weight::from_parts(20_081_000, 3574)
+		// Minimum execution time: 17_254 nanoseconds.
+		Weight::from_parts(17_799_000, 3574)
 			.saturating_add(T::DbWeight::get().reads(1))
 			.saturating_add(T::DbWeight::get().writes(1))
 	}

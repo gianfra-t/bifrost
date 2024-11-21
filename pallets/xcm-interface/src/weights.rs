@@ -72,8 +72,8 @@ impl WeightInfo for () {
 		// Proof Size summary in bytes:
 		//  Measured:  `134`
 		//  Estimated: `3599`
-		// Minimum execution time: 21_896_000 picoseconds.
-		Weight::from_parts(22_943_000, 3599)
+		// Minimum execution time: 19_185_000 picoseconds.
+		Weight::from_parts(19_585_000, 3599)
 			.saturating_add(RocksDbWeight::get().reads(5_u64))
 			.saturating_add(RocksDbWeight::get().writes(3_u64))
 	}

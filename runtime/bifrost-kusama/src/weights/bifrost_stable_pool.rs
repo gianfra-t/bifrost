@@ -66,8 +66,8 @@ impl<T: frame_system::Config> bifrost_stable_pool::WeightInfo for BifrostWeight<
 		// Proof Size summary in bytes:
 		//  Measured:  `413`
 		//  Estimated: `3878`
-		// Minimum execution time: 19_168 nanoseconds.
-		Weight::from_parts(19_613_000, 3878)
+		// Minimum execution time: 17_410 nanoseconds.
+		Weight::from_parts(18_096_000, 3878)
 			.saturating_add(T::DbWeight::get().reads(4))
 			.saturating_add(T::DbWeight::get().writes(4))
 	}
@@ -79,8 +79,8 @@ impl<T: frame_system::Config> bifrost_stable_pool::WeightInfo for BifrostWeight<
 		// Proof Size summary in bytes:
 		//  Measured:  `258`
 		//  Estimated: `8673`
-		// Minimum execution time: 17_805 nanoseconds.
-		Weight::from_parts(19_248_000, 8673)
+		// Minimum execution time: 16_041 nanoseconds.
+		Weight::from_parts(16_791_000, 8673)
 			.saturating_add(T::DbWeight::get().reads(4))
 			.saturating_add(T::DbWeight::get().writes(2))
 	}
@@ -90,8 +90,8 @@ impl<T: frame_system::Config> bifrost_stable_pool::WeightInfo for BifrostWeight<
 		// Proof Size summary in bytes:
 		//  Measured:  `0`
 		//  Estimated: `0`
-		// Minimum execution time: 4_466 nanoseconds.
-		Weight::from_parts(4_698_000, 0)
+		// Minimum execution time: 4_216 nanoseconds.
+		Weight::from_parts(4_506_000, 0)
 			.saturating_add(T::DbWeight::get().writes(1))
 	}
 	// Storage: `StableAsset::TokenRateHardcap` (r:0 w:1)
@@ -100,8 +100,8 @@ impl<T: frame_system::Config> bifrost_stable_pool::WeightInfo for BifrostWeight<
 		// Proof Size summary in bytes:
 		//  Measured:  `0`
 		//  Estimated: `0`
-		// Minimum execution time: 4_479 nanoseconds.
-		Weight::from_parts(4_919_000, 0)
+		// Minimum execution time: 4_049 nanoseconds.
+		Weight::from_parts(4_242_000, 0)
 			.saturating_add(T::DbWeight::get().writes(1))
 	}
 	// Storage: `StableAsset::Pools` (r:1 w:1)
@@ -120,8 +120,8 @@ impl<T: frame_system::Config> bifrost_stable_pool::WeightInfo for BifrostWeight<
 		// Proof Size summary in bytes:
 		//  Measured:  `1488`
 		//  Estimated: `8769`
-		// Minimum execution time: 126_346 nanoseconds.
-		Weight::from_parts(135_377_000, 8769)
+		// Minimum execution time: 117_252 nanoseconds.
+		Weight::from_parts(120_418_000, 8769)
 			.saturating_add(T::DbWeight::get().reads(11))
 			.saturating_add(T::DbWeight::get().writes(7))
 	}
@@ -143,8 +143,8 @@ impl<T: frame_system::Config> bifrost_stable_pool::WeightInfo for BifrostWeight<
 		// Proof Size summary in bytes:
 		//  Measured:  `1399`
 		//  Estimated: `6196`
-		// Minimum execution time: 117_154 nanoseconds.
-		Weight::from_parts(122_402_000, 6196)
+		// Minimum execution time: 107_034 nanoseconds.
+		Weight::from_parts(111_722_000, 6196)
 			.saturating_add(T::DbWeight::get().reads(8))
 			.saturating_add(T::DbWeight::get().writes(5))
 	}
@@ -164,8 +164,8 @@ impl<T: frame_system::Config> bifrost_stable_pool::WeightInfo for BifrostWeight<
 		// Proof Size summary in bytes:
 		//  Measured:  `1399`
 		//  Estimated: `6196`
-		// Minimum execution time: 109_866 nanoseconds.
-		Weight::from_parts(119_675_000, 6196)
+		// Minimum execution time: 100_049 nanoseconds.
+		Weight::from_parts(106_293_000, 6196)
 			.saturating_add(T::DbWeight::get().reads(7))
 			.saturating_add(T::DbWeight::get().writes(5))
 	}
@@ -185,8 +185,8 @@ impl<T: frame_system::Config> bifrost_stable_pool::WeightInfo for BifrostWeight<
 		// Proof Size summary in bytes:
 		//  Measured:  `1399`
 		//  Estimated: `6196`
-		// Minimum execution time: 91_613 nanoseconds.
-		Weight::from_parts(93_424_000, 6196)
+		// Minimum execution time: 84_453 nanoseconds.
+		Weight::from_parts(88_925_000, 6196)
 			.saturating_add(T::DbWeight::get().reads(7))
 			.saturating_add(T::DbWeight::get().writes(5))
 	}
@@ -206,8 +206,8 @@ impl<T: frame_system::Config> bifrost_stable_pool::WeightInfo for BifrostWeight<
 		// Proof Size summary in bytes:
 		//  Measured:  `1399`
 		//  Estimated: `6196`
-		// Minimum execution time: 111_635 nanoseconds.
-		Weight::from_parts(117_153_000, 6196)
+		// Minimum execution time: 102_070 nanoseconds.
+		Weight::from_parts(108_122_000, 6196)
 			.saturating_add(T::DbWeight::get().reads(7))
 			.saturating_add(T::DbWeight::get().writes(5))
 	}
@@ -217,8 +217,8 @@ impl<T: frame_system::Config> bifrost_stable_pool::WeightInfo for BifrostWeight<
 		// Proof Size summary in bytes:
 		//  Measured:  `446`
 		//  Estimated: `3911`
-		// Minimum execution time: 10_218 nanoseconds.
-		Weight::from_parts(10_662_000, 3911)
+		// Minimum execution time: 8_790 nanoseconds.
+		Weight::from_parts(9_081_000, 3911)
 			.saturating_add(T::DbWeight::get().reads(1))
 			.saturating_add(T::DbWeight::get().writes(1))
 	}
@@ -228,8 +228,8 @@ impl<T: frame_system::Config> bifrost_stable_pool::WeightInfo for BifrostWeight<
 		// Proof Size summary in bytes:
 		//  Measured:  `446`
 		//  Estimated: `3911`
-		// Minimum execution time: 9_656 nanoseconds.
-		Weight::from_parts(10_039_000, 3911)
+		// Minimum execution time: 8_356 nanoseconds.
+		Weight::from_parts(8_736_000, 3911)
 			.saturating_add(T::DbWeight::get().reads(1))
 			.saturating_add(T::DbWeight::get().writes(1))
 	}
@@ -239,8 +239,8 @@ impl<T: frame_system::Config> bifrost_stable_pool::WeightInfo for BifrostWeight<
 		// Proof Size summary in bytes:
 		//  Measured:  `446`
 		//  Estimated: `3911`
-		// Minimum execution time: 9_011 nanoseconds.
-		Weight::from_parts(9_350_000, 3911)
+		// Minimum execution time: 8_158 nanoseconds.
+		Weight::from_parts(8_872_000, 3911)
 			.saturating_add(T::DbWeight::get().reads(1))
 			.saturating_add(T::DbWeight::get().writes(1))
 	}

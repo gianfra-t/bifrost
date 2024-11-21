@@ -114,8 +114,8 @@ impl<T: frame_system::Config> leverage_staking::WeightInfo for BifrostWeight<T> 
 		// Proof Size summary in bytes:
 		//  Measured:  `3439`
 		//  Estimated: `13955`
-		// Minimum execution time: 344_670 nanoseconds.
-		Weight::from_parts(367_548_000, 13955)
+		// Minimum execution time: 303_356 nanoseconds.
+		Weight::from_parts(317_439_000, 13955)
 			.saturating_add(T::DbWeight::get().reads(43))
 			.saturating_add(T::DbWeight::get().writes(21))
 	}

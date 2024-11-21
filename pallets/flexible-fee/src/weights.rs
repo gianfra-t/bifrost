@@ -65,8 +65,8 @@ impl WeightInfo for () {
 		// Proof Size summary in bytes:
 		//  Measured:  `0`
 		//  Estimated: `0`
-		// Minimum execution time: 4_640_000 picoseconds.
-		Weight::from_parts(5_529_000, 0)
+		// Minimum execution time: 3_712_000 picoseconds.
+		Weight::from_parts(3_985_000, 0)
 			.saturating_add(RocksDbWeight::get().writes(1_u64))
 	}
 	/// Storage: `FlexibleFee::UniversalFeeCurrencyOrderList` (r:0 w:1)
@@ -75,8 +75,8 @@ impl WeightInfo for () {
 		// Proof Size summary in bytes:
 		//  Measured:  `0`
 		//  Estimated: `0`
-		// Minimum execution time: 3_982_000 picoseconds.
-		Weight::from_parts(4_380_000, 0)
+		// Minimum execution time: 3_239_000 picoseconds.
+		Weight::from_parts(3_395_000, 0)
 			.saturating_add(RocksDbWeight::get().writes(1_u64))
 	}
 }

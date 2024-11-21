@@ -70,8 +70,8 @@ impl WeightInfo for () {
 		// Proof Size summary in bytes:
 		//  Measured:  `337`
 		//  Estimated: `3802`
-		// Minimum execution time: 9_887_000 picoseconds.
-		Weight::from_parts(10_404_000, 3802)
+		// Minimum execution time: 8_739_000 picoseconds.
+		Weight::from_parts(9_337_000, 3802)
 			.saturating_add(RocksDbWeight::get().reads(2_u64))
 			.saturating_add(RocksDbWeight::get().writes(2_u64))
 	}
@@ -81,8 +81,8 @@ impl WeightInfo for () {
 		// Proof Size summary in bytes:
 		//  Measured:  `424`
 		//  Estimated: `6364`
-		// Minimum execution time: 12_589_000 picoseconds.
-		Weight::from_parts(13_038_000, 6364)
+		// Minimum execution time: 10_913_000 picoseconds.
+		Weight::from_parts(11_718_000, 6364)
 			.saturating_add(RocksDbWeight::get().reads(2_u64))
 			.saturating_add(RocksDbWeight::get().writes(1_u64))
 	}
@@ -98,8 +98,8 @@ impl WeightInfo for () {
 		// Proof Size summary in bytes:
 		//  Measured:  `414`
 		//  Estimated: `3879`
-		// Minimum execution time: 13_906_000 picoseconds.
-		Weight::from_parts(14_525_000, 3879)
+		// Minimum execution time: 12_050_000 picoseconds.
+		Weight::from_parts(12_529_000, 3879)
 			.saturating_add(RocksDbWeight::get().reads(3_u64))
 			.saturating_add(RocksDbWeight::get().writes(3_u64))
 	}
@@ -115,8 +115,8 @@ impl WeightInfo for () {
 		// Proof Size summary in bytes:
 		//  Measured:  `414`
 		//  Estimated: `3879`
-		// Minimum execution time: 12_569_000 picoseconds.
-		Weight::from_parts(12_987_000, 3879)
+		// Minimum execution time: 11_367_000 picoseconds.
+		Weight::from_parts(11_741_000, 3879)
 			.saturating_add(RocksDbWeight::get().reads(1_u64))
 			.saturating_add(RocksDbWeight::get().writes(3_u64))
 	}
@@ -126,8 +126,8 @@ impl WeightInfo for () {
 		// Proof Size summary in bytes:
 		//  Measured:  `409`
 		//  Estimated: `3874`
-		// Minimum execution time: 10_337_000 picoseconds.
-		Weight::from_parts(10_772_000, 3874)
+		// Minimum execution time: 9_045_000 picoseconds.
+		Weight::from_parts(9_388_000, 3874)
 			.saturating_add(RocksDbWeight::get().reads(1_u64))
 			.saturating_add(RocksDbWeight::get().writes(1_u64))
 	}

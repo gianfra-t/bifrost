@@ -60,8 +60,8 @@ impl<T: frame_system::Config> bifrost_vstoken_conversion::WeightInfo for Bifrost
 		// Proof Size summary in bytes:
 		//  Measured:  `213`
 		//  Estimated: `1517`
-		// Minimum execution time: 5_886 nanoseconds.
-		Weight::from_parts(6_232_000, 1517)
+		// Minimum execution time: 5_593 nanoseconds.
+		Weight::from_parts(5_860_000, 1517)
 			.saturating_add(T::DbWeight::get().reads(1))
 			.saturating_add(T::DbWeight::get().writes(1))
 	}
@@ -71,8 +71,8 @@ impl<T: frame_system::Config> bifrost_vstoken_conversion::WeightInfo for Bifrost
 		// Proof Size summary in bytes:
 		//  Measured:  `213`
 		//  Estimated: `3479`
-		// Minimum execution time: 6_624 nanoseconds.
-		Weight::from_parts(6_955_000, 3479)
+		// Minimum execution time: 5_958 nanoseconds.
+		Weight::from_parts(6_360_000, 3479)
 			.saturating_add(T::DbWeight::get().reads(1))
 			.saturating_add(T::DbWeight::get().writes(1))
 	}
@@ -82,8 +82,8 @@ impl<T: frame_system::Config> bifrost_vstoken_conversion::WeightInfo for Bifrost
 		// Proof Size summary in bytes:
 		//  Measured:  `213`
 		//  Estimated: `1489`
-		// Minimum execution time: 5_898 nanoseconds.
-		Weight::from_parts(10_102_000, 1489)
+		// Minimum execution time: 5_373 nanoseconds.
+		Weight::from_parts(5_547_000, 1489)
 			.saturating_add(T::DbWeight::get().reads(1))
 			.saturating_add(T::DbWeight::get().writes(1))
 	}
@@ -105,8 +105,8 @@ impl<T: frame_system::Config> bifrost_vstoken_conversion::WeightInfo for Bifrost
 		// Proof Size summary in bytes:
 		//  Measured:  `1461`
 		//  Estimated: `11362`
-		// Minimum execution time: 79_089 nanoseconds.
-		Weight::from_parts(84_777_000, 11362)
+		// Minimum execution time: 66_147 nanoseconds.
+		Weight::from_parts(70_511_000, 11362)
 			.saturating_add(T::DbWeight::get().reads(14))
 			.saturating_add(T::DbWeight::get().writes(9))
 	}
@@ -128,8 +128,8 @@ impl<T: frame_system::Config> bifrost_vstoken_conversion::WeightInfo for Bifrost
 		// Proof Size summary in bytes:
 		//  Measured:  `1453`
 		//  Estimated: `11362`
-		// Minimum execution time: 74_491 nanoseconds.
-		Weight::from_parts(77_798_000, 11362)
+		// Minimum execution time: 64_628 nanoseconds.
+		Weight::from_parts(65_908_000, 11362)
 			.saturating_add(T::DbWeight::get().reads(13))
 			.saturating_add(T::DbWeight::get().writes(7))
 	}
