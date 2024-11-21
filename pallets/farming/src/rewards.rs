@@ -391,7 +391,6 @@ impl<T: Config> Pallet<T> {
 								}
 								let from_balance = T::MultiCurrency::total_balance(*reward_currency, &pool_info.reward_issuer);
 
-								log::debug!("from_balance {:?},reward_to_withdraw{:?}total_reward{:?}",from_balance,reward_to_withdraw,total_reward);
 								// pay reward to `who`
 								T::MultiCurrency::transfer(
 									*reward_currency,

@@ -112,24 +112,25 @@ where
 		pid: PoolId,
 		pool_info: &mut PoolInfo<BalanceOf<T>, CurrencyIdOf<T>, AccountIdOf<T>, BlockNumberFor<T>>,
 		gauge_basic_rewards: BTreeMap<CurrencyIdOf<T>, BalanceOf<T>>,
-		max_block: BlockNumberFor<T>,
 	) -> DispatchResult {
-		pool_info.gauge = Some(pid);
-		let current_block_number = frame_system::Pallet::<T>::block_number();
-		let gauge_pool_info = GaugePoolInfo::new(
-			pid,
+		let gid: u32 = pid + GAUGE_BASE_ID;
+		pool_info.gauge = Some(gid);
+		let gauge_reward_issuer: AccountIdOf<T> =
+			T::RewardIssuer::get().into_sub_account_truncating(gid);
+		let gauge_pool_info = PoolInfo::new_gauge(
 			pool_info.keeper.clone(),
-			pool_info.reward_issuer.clone(),
+			gauge_reward_issuer,
+			pool_info.tokens_proportion.clone(),
+			pool_info.basic_token.clone(),
 			gauge_basic_rewards,
-			max_block,
-			current_block_number,
+			None,
+			Zero::zero(), // min_deposit_to_start,
+			Default::default(),
+			Default::default(),
+			Default::default(),
+			Default::default(),
 		);
-
-		GaugePoolInfos::<T>::insert(pid, &gauge_pool_info);
-		GaugePoolNextId::<T>::mutate(|id| -> DispatchResult {
-			*id = id.checked_add(1).ok_or(ArithmeticError::Overflow)?;
-			Ok(())
-		})?;
+		PoolInfos::<T>::insert(gid, &gauge_pool_info);
 		Ok(())
 	}
 

@@ -464,7 +464,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			tokens_proportion: Vec<(CurrencyIdOf<T>, Perbill)>,
 			basic_rewards: Vec<(CurrencyIdOf<T>, BalanceOf<T>)>,
-			gauge_init: Option<(BlockNumberFor<T>, Vec<(CurrencyIdOf<T>, BalanceOf<T>)>)>,
+			gauge_init: Option<Vec<(CurrencyIdOf<T>, BalanceOf<T>)>>,
 			min_deposit_to_start: BalanceOf<T>,
 			#[pallet::compact] after_block_to_start: BlockNumberFor<T>,
 			#[pallet::compact] withdraw_limit_time: BlockNumberFor<T>,
@@ -497,35 +497,11 @@ pub mod pallet {
 				withdraw_limit_count,
 			);
 
-			if let Some((max_block, gauge_basic_rewards)) = gauge_init {
+			if let Some(gauge_basic_rewards) = gauge_init {
 				let gauge_basic_rewards_map: BTreeMap<CurrencyIdOf<T>, BalanceOf<T>> =
 					gauge_basic_rewards.into_iter().collect();
 
-				Self::create_gauge_pool(
-					pid,
-					&mut pool_info,
-					gauge_basic_rewards_map.clone(),
-					max_block,
-				)?;
-				// let gauge_reward_issuer =
-				// 	T::GaugeRewardIssuer::get().into_sub_account_truncating(pid);
-				let gauge_pid: u32 = pid + GAUGE_BASE_ID;
-				let gauge_reward_issuer: AccountIdOf<T> =
-					T::RewardIssuer::get().into_sub_account_truncating(gauge_pid);
-				let mut gauge_pool_info = PoolInfo::new_gauge(
-					keeper,
-					gauge_reward_issuer,
-					tokens_proportion_map,
-					basic_token,
-					gauge_basic_rewards_map,
-					None,
-					Zero::zero(), // min_deposit_to_start,
-					after_block_to_start,
-					withdraw_limit_time,
-					claim_limit_time,
-					withdraw_limit_count,
-				);
-				PoolInfos::<T>::insert(gauge_pid, &gauge_pool_info);
+				Self::create_gauge_pool(pid, &mut pool_info, gauge_basic_rewards_map.clone())?;
 			};
 
 			PoolInfos::<T>::insert(pid, &pool_info);
@@ -651,16 +627,17 @@ pub mod pallet {
 				{
 					match gauge_new_value.cmp(&share_info.share) {
 						Ordering::Less => {
-							let gauge_remove_value = share_info.share - gauge_new_value;
+							let gauge_remove_value =
+								share_info.share.saturating_sub(gauge_new_value);
 							Self::remove_share(
 								&exchanger,
 								gauge_pid,
 								Some(gauge_remove_value),
 								gauge_pool_info.withdraw_limit_time,
-							)?; // TODO: withdraw_limit_time
+							)?;
 						},
 						Ordering::Equal | Ordering::Greater => {
-							let gauge_add_value = gauge_new_value - share_info.share;
+							let gauge_add_value = gauge_new_value.saturating_sub(share_info.share);
 							Self::add_share(
 								&exchanger,
 								gauge_pid,
@@ -718,20 +695,23 @@ pub mod pallet {
 				let gauge_new_value = T::BbBNC::balance_of(&exchanger, None)?
 					.checked_mul(&share_info.share.saturating_sub(native_remove_value))
 					.ok_or(ArithmeticError::Overflow)?;
-				if let Some(share_info) = SharesAndWithdrawnRewards::<T>::get(gauge_pid, &exchanger)
+				if let Some(gauge_share_info) =
+					SharesAndWithdrawnRewards::<T>::get(gauge_pid, &exchanger)
 				{
-					match gauge_new_value.cmp(&share_info.share) {
+					match gauge_new_value.cmp(&gauge_share_info.share) {
 						Ordering::Less => {
-							let gauge_remove_value = share_info.share - gauge_new_value;
+							let gauge_remove_value =
+								gauge_share_info.share.saturating_sub(gauge_new_value);
 							Self::remove_share(
 								&exchanger,
 								gauge_pid,
 								Some(gauge_remove_value),
 								gauge_pool_info.withdraw_limit_time,
-							)?; // TODO: withdraw_limit_time
+							)?;
 						},
 						Ordering::Equal | Ordering::Greater => {
-							let gauge_add_value = gauge_new_value - share_info.share;
+							let gauge_add_value =
+								gauge_new_value.saturating_sub(gauge_share_info.share);
 							Self::add_share(
 								&exchanger,
 								gauge_pid,
@@ -829,12 +809,6 @@ pub mod pallet {
 			}
 
 			if all_retired {
-				if let Some(ref gid) = pool_info.gauge {
-					let mut gauge_pool_info =
-						GaugePoolInfos::<T>::get(gid).ok_or(Error::<T>::GaugePoolNotExist)?;
-					gauge_pool_info.gauge_state = GaugeState::Unbond;
-					GaugePoolInfos::<T>::insert(&gid, gauge_pool_info);
-				}
 				pool_info.state = PoolState::Retired;
 				pool_info.gauge = None;
 				PoolInfos::<T>::insert(&pid, pool_info);
@@ -901,7 +875,7 @@ pub mod pallet {
 			withdraw_limit_time: Option<BlockNumberFor<T>>,
 			claim_limit_time: Option<BlockNumberFor<T>>,
 			withdraw_limit_count: Option<u8>,
-			gauge_init: Option<(BlockNumberFor<T>, Vec<(CurrencyIdOf<T>, BalanceOf<T>)>)>,
+			gauge_init: Option<Vec<(CurrencyIdOf<T>, BalanceOf<T>)>>,
 		) -> DispatchResult {
 			T::ControlOrigin::ensure_origin(origin)?;
 
@@ -927,11 +901,11 @@ pub mod pallet {
 			if let Some(withdraw_limit_count) = withdraw_limit_count {
 				pool_info.withdraw_limit_count = withdraw_limit_count;
 			};
-			if let Some((max_block, gauge_basic_rewards)) = gauge_init {
+			if let Some(gauge_basic_rewards) = gauge_init {
 				let gauge_basic_rewards_map: BTreeMap<CurrencyIdOf<T>, BalanceOf<T>> =
 					gauge_basic_rewards.into_iter().collect();
 
-				Self::create_gauge_pool(pid, &mut pool_info, gauge_basic_rewards_map, max_block)?;
+				Self::create_gauge_pool(pid, &mut pool_info, gauge_basic_rewards_map)?;
 			};
 			pool_info.total_shares = Default::default();
 			pool_info.rewards = BTreeMap::new();
