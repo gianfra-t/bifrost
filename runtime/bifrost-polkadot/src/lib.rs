@@ -872,10 +872,10 @@ parameter_types! {
 	pub MinDelegatorStk: u128 = 50 * BNCS;
 	pub AllowInflation: bool = false;
 	pub ToMigrateInvulnables: Vec<AccountId> = prod_or_fast!(vec![
-		hex!["5c7e9ccd1045cac7f8c5c77a79c87f44019d1dda4f5032713bda89c5d73cb36b"].into(),
-		hex!["606b0aad375ae1715fbe6a07315136a8e9c1c84a91230f6a0c296c2953581335"].into(),
-		hex!["b6ba81e73bd39203e006fc99cc1e41976745de2ea2007bf62ed7c9a48ccc5b1d"].into(),
-		hex!["ce42cea2dd0d4ac87ccdd5f0f2e1010955467f5a37587cf6af8ee2b4ba781034"].into(),
+		hex!["66204aeda74f07f77a4b6945681296763706f98d0f8aebb1b9ccdf6e9b7ac13f"].into(),
+		hex!["9c2d45edb30d4bf0c285d6809e28c55e871f10578c5a3ea62da152d03761d266"].into(),
+		hex!["98b19fa5a3e98f693b7440de07b4744834ff0072cb704f1c6e33791953ac4924"].into(),
+		hex!["12d3ab675d6503279133898efe246a63fdc8be685cc3f7bce079aac064108a7a"].into(),
 	],vec![]);
 	pub PaymentInRound: u128 = 180 * BNCS;
 	pub InitSeedStk: u128 = 5000 * BNCS;
