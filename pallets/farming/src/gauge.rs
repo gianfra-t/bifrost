@@ -121,7 +121,7 @@ where
 			pool_info.keeper.clone(),
 			gauge_reward_issuer,
 			pool_info.tokens_proportion.clone(),
-			pool_info.basic_token.clone(),
+			pool_info.basic_token,
 			gauge_basic_rewards,
 			None,
 			Zero::zero(), // min_deposit_to_start,

@@ -487,7 +487,7 @@ pub mod pallet {
 				keeper.clone(),
 				reward_issuer,
 				tokens_proportion_map.clone(),
-				basic_token.clone(),
+				basic_token,
 				basic_rewards_map.clone(),
 				None,
 				min_deposit_to_start,

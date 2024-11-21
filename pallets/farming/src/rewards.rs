@@ -389,7 +389,6 @@ impl<T: Config> Pallet<T> {
 										account_to_send = T::TreasuryAccount::get();
 									}
 								}
-								let from_balance = T::MultiCurrency::total_balance(*reward_currency, &pool_info.reward_issuer);
 
 								// pay reward to `who`
 								T::MultiCurrency::transfer(
