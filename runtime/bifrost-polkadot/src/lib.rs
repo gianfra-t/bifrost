@@ -38,7 +38,7 @@ use bifrost_primitives::{
 	IncentivePalletId, IncentivePoolAccount, LendMarketPalletId, LiquidityAccount,
 	LocalBncLocation, MerkleDirtributorPalletId, OraclePalletId, ParachainStakingPalletId,
 	SlpEntrancePalletId, SlpExitPalletId, SystemMakerPalletId, SystemStakingPalletId,
-	TreasuryPalletId,
+	TreasuryPalletId, BNC,
 };
 use cumulus_pallet_parachain_system::{RelayNumberMonotonicallyIncreases, RelaychainDataProvider};
 pub use frame_support::{
@@ -1313,7 +1313,7 @@ parameter_types! {
 pub struct DerivativeAccountTokenFilter;
 impl Contains<CurrencyId> for DerivativeAccountTokenFilter {
 	fn contains(token: &CurrencyId) -> bool {
-		*token == RelayCurrencyId::get()
+		*token == RelayCurrencyId::get() || *token == BNC
 	}
 }
 
