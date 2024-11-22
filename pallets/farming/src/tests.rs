@@ -270,6 +270,13 @@ fn init_gauge() -> (PoolId, BalanceOf<Runtime>) {
 	assert_ok!(Tokens::deposit(KSM, &gauge_reward_issuer, 990_000));
 	assert_eq!(Tokens::free_balance(KSM, &gauge_reward_issuer), 990_000);
 
+	let pid = 0;
+
+	let gauge_reward_issuer: AccountId =
+		<Runtime as Config>::GaugeRewardIssuer::get().into_sub_account_truncating(pid);
+	assert_ok!(Tokens::deposit(KSM, &gauge_reward_issuer, 990_000));
+	assert_eq!(Tokens::free_balance(KSM, &gauge_reward_issuer), 990_000);
+
 	assert_ok!(Farming::create_farming_pool(
 		RuntimeOrigin::signed(ALICE),
 		tokens_proportion.clone(),
