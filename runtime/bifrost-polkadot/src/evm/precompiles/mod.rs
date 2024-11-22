@@ -22,7 +22,6 @@ use crate::evm::precompiles::{
 	erc20_mapping::is_asset_address, multicurrency::MultiCurrencyPrecompile,
 };
 use ethabi::Token;
-use fp_evm::AccountProvider;
 use frame_support::dispatch::{GetDispatchInfo, PostDispatchInfo};
 use hex_literal::hex;
 use pallet_evm::{
