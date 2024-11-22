@@ -33,23 +33,19 @@ use frame_support::{
 	ensure,
 	pallet_prelude::*,
 	traits::{Currency, EnsureOrigin},
-	weights::{constants::WEIGHT_REF_TIME_PER_SECOND, Weight},
+	weights::Weight,
 };
 use frame_system::pallet_prelude::*;
 use scale_info::{prelude::string::String, TypeInfo};
 use sp_runtime::{
 	traits::{One, UniqueSaturatedFrom},
-	ArithmeticError, FixedPointNumber, FixedU128, RuntimeDebug,
+	ArithmeticError, RuntimeDebug,
 };
 use sp_std::{boxed::Box, vec::Vec};
 use xcm::{
-	opaque::lts::XcmContext,
-	v3::MultiLocation,
-	v4::{prelude::*, Asset, Location},
+	v4::{prelude::*, Location},
 	VersionedLocation,
 };
-use xcm_builder::TakeRevenue;
-use xcm_executor::{traits::WeightTrader, AssetsInHolding};
 
 pub mod migrations;
 mod mock;
@@ -423,13 +419,15 @@ impl<T: Config> Pallet<T> {
 
 		Ok(())
 	}
+
+	pub fn asset_ids() -> Vec<AssetId> {
+		LocationToCurrencyIds::<T>::iter_keys().map(|key| AssetId(key)).collect()
+	}
 }
 
-pub struct AssetIdMaps<T>(sp_std::marker::PhantomData<T>);
+pub struct AssetIdMaps<T>(PhantomData<T>);
 
-impl<T: Config> CurrencyIdMapping<CurrencyId, MultiLocation, AssetMetadata<BalanceOf<T>>>
-	for AssetIdMaps<T>
-{
+impl<T: Config> CurrencyIdMapping<CurrencyId, AssetMetadata<BalanceOf<T>>> for AssetIdMaps<T> {
 	fn get_asset_metadata(asset_ids: AssetIds) -> Option<AssetMetadata<BalanceOf<T>>> {
 		AssetMetadatas::<T>::get(asset_ids)
 	}
@@ -442,13 +440,12 @@ impl<T: Config> CurrencyIdMapping<CurrencyId, MultiLocation, AssetMetadata<Balan
 		CurrencyMetadatas::<T>::iter_keys().collect()
 	}
 
-	fn get_location(currency_id: CurrencyId) -> Option<Location> {
-		CurrencyIdToLocations::<T>::get(currency_id).map(|location| location.try_into().ok())?
+	fn get_location(currency_id: &CurrencyId) -> Option<Location> {
+		CurrencyIdToLocations::<T>::get(currency_id)
 	}
 
-	fn get_currency_id(multi_location: Location) -> Option<CurrencyId> {
-		let v4_location = Location::try_from(multi_location).ok()?;
-		LocationToCurrencyIds::<T>::get(v4_location)
+	fn get_currency_id(location: &Location) -> Option<CurrencyId> {
+		LocationToCurrencyIds::<T>::get(location)
 	}
 }
 
@@ -584,131 +581,5 @@ impl<T: Config> CurrencyIdRegister<CurrencyId> for AssetIdMaps<T> {
 				minimal_balance: BalanceOf::<T>::unique_saturated_from(1_000_000u128),
 			},
 		)
-	}
-}
-
-/// Simple fee calculator that requires payment in a single fungible at a fixed rate.
-///
-/// The constant `FixedRate` type parameter should be the concrete fungible ID and the amount of it
-/// required for one second of weight.
-pub struct FixedRateOfAsset<T, FixedRate: Get<u128>, R: TakeRevenue> {
-	weight: u64,
-	amount: u128,
-	ed_ratio: FixedU128,
-	location: Option<Location>,
-	_marker: PhantomData<(T, FixedRate, R)>,
-}
-
-impl<T: Config, FixedRate: Get<u128>, R: TakeRevenue> WeightTrader
-	for FixedRateOfAsset<T, FixedRate, R>
-where
-	BalanceOf<T>: Into<u128>,
-{
-	fn new() -> Self {
-		Self {
-			weight: 0,
-			amount: 0,
-			ed_ratio: Default::default(),
-			location: None,
-			_marker: PhantomData,
-		}
-	}
-
-	fn buy_weight(
-		&mut self,
-		weight: Weight,
-		payment: AssetsInHolding,
-		_context: &XcmContext,
-	) -> Result<AssetsInHolding, XcmError> {
-		log::trace!(target: "asset-registry::weight", "buy_weight weight: {:?}, payment: {:?}", weight, payment);
-
-		// only support first fungible assets now.
-		let asset_id = payment
-			.fungible
-			.iter()
-			.next()
-			.map_or(Err(XcmError::TooExpensive), |v| Ok(v.0))?;
-
-		let AssetId(ref location) = asset_id.clone();
-		log::debug!(target: "asset-registry::weight", "buy_weight location: {:?}", location);
-
-		let v4_location =
-			Location::try_from(location.clone()).map_err(|_| XcmError::InvalidLocation)?;
-
-		if let Some(currency_id) = LocationToCurrencyIds::<T>::get(v4_location) {
-			if let Some(currency_metadatas) = CurrencyMetadatas::<T>::get(currency_id) {
-				// The integration tests can ensure the ed is non-zero.
-				let ed_ratio = FixedU128::saturating_from_rational(
-					currency_metadatas.minimal_balance.into(),
-					T::Currency::minimum_balance().into(),
-				);
-				// The WEIGHT_REF_TIME_PER_SECOND is non-zero.
-				let weight_ratio = FixedU128::saturating_from_rational(
-					weight.ref_time(),
-					WEIGHT_REF_TIME_PER_SECOND,
-				);
-				let amount =
-					ed_ratio.saturating_mul_int(weight_ratio.saturating_mul_int(FixedRate::get()));
-
-				let required = Asset { id: asset_id.clone(), fun: Fungible(amount) };
-
-				log::trace!(
-					target: "asset-registry::weight", "buy_weight payment: {:?}, required: {:?}, fixed_rate: {:?}, ed_ratio: {:?}, weight_ratio: {:?}",
-					payment, required, FixedRate::get(), ed_ratio, weight_ratio
-				);
-				let unused =
-					payment.clone().checked_sub(required).map_err(|_| XcmError::TooExpensive)?;
-				self.weight = self.weight.saturating_add(weight.ref_time());
-				self.amount = self.amount.saturating_add(amount);
-				self.ed_ratio = ed_ratio;
-				self.location = Some(location.clone());
-				return Ok(unused);
-			}
-		};
-
-		log::trace!(target: "asset-registry::weight", "no concrete fungible asset");
-		Err(XcmError::TooExpensive)
-	}
-
-	fn refund_weight(&mut self, weight: Weight, _context: &XcmContext) -> Option<Asset> {
-		log::trace!(
-			target: "asset-registry::weight", "refund_weight weight: {:?}, weight: {:?}, amount: {:?}, ed_ratio: {:?}, location: {:?}",
-			weight, self.weight, self.amount, self.ed_ratio, self.location
-		);
-		let weight = weight.min(Weight::from_parts(self.weight, 0));
-		let weight_ratio =
-			FixedU128::saturating_from_rational(weight.ref_time(), WEIGHT_REF_TIME_PER_SECOND);
-		let amount = self
-			.ed_ratio
-			.saturating_mul_int(weight_ratio.saturating_mul_int(FixedRate::get()));
-
-		self.weight = self.weight.saturating_sub(weight.ref_time());
-		self.amount = self.amount.saturating_sub(amount);
-
-		log::trace!(target: "asset-registry::weight", "refund_weight amount: {:?}", amount);
-		if amount > 0 && self.location.is_some() {
-			Some(Asset {
-				fun: Fungible(amount),
-				id: AssetId(
-					self.location.clone().expect("checked is non-empty; qed").try_into().unwrap(),
-				),
-			})
-		} else {
-			None
-		}
-	}
-}
-
-impl<T, FixedRate: Get<u128>, R: TakeRevenue> Drop for FixedRateOfAsset<T, FixedRate, R> {
-	fn drop(&mut self) {
-		log::trace!(target: "asset-registry::weight", "take revenue, weight: {:?}, amount: {:?}, location: {:?}", self.weight, self.amount, self.location);
-		if self.amount > 0 && self.location.is_some() {
-			R::take_revenue(Asset {
-				fun: Fungible(self.amount),
-				id: AssetId(
-					self.location.clone().expect("checked is non-empty; qed").try_into().unwrap(),
-				),
-			});
-		}
 	}
 }

@@ -35,7 +35,6 @@ pub use pallet::*;
 use pallet_traits::*;
 use sp_runtime::{traits::CheckedDiv, FixedU128};
 use sp_std::vec::Vec;
-use xcm::v3::MultiLocation;
 
 #[cfg(test)]
 mod mock;
@@ -79,11 +78,7 @@ pub mod pallet {
 		type RelayCurrency: Get<CurrencyId>;
 
 		/// Convert Location to `T::CurrencyId`.
-		type CurrencyIdConvert: CurrencyIdMapping<
-			CurrencyId,
-			MultiLocation,
-			AssetMetadata<BalanceOf<Self>>,
-		>;
+		type CurrencyIdConvert: CurrencyIdMapping<CurrencyId, AssetMetadata<BalanceOf<Self>>>;
 
 		/// Weight information
 		type WeightInfo: WeightInfo;

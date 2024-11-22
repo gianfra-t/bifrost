@@ -26,6 +26,9 @@
 #[cfg(feature = "std")]
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
+use bifrost_primitives::{
+	BLP_BNC_VBNC, KUSAMA_VBNC_ASSET_INDEX, KUSAMA_VBNC_LP_ASSET_INDEX, LP_BNC_VBNC, VBNC,
+};
 use bifrost_slp::{DerivativeAccountProvider, QueryResponseManager};
 use core::convert::TryInto;
 // A few exports that help ease life for downstream crates.
@@ -34,9 +37,9 @@ use bifrost_primitives::{
 	BifrostCrowdloanId, BifrostVsbondAccount, BuybackPalletId, CommissionPalletId,
 	FarmingBoostPalletId, FarmingGaugeRewardIssuerPalletId, FarmingKeeperPalletId,
 	FarmingRewardIssuerPalletId, FeeSharePalletId, FlexibleFeePalletId, IncentivePoolAccount,
-	LendMarketPalletId, MerkleDirtributorPalletId, OraclePalletId, ParachainStakingPalletId,
-	SlpEntrancePalletId, SlpExitPalletId, SystemMakerPalletId, SystemStakingPalletId,
-	TreasuryPalletId, VBNCConvertPalletId,
+	LendMarketPalletId, LocalBncLocation, MerkleDirtributorPalletId, OraclePalletId,
+	ParachainStakingPalletId, SlpEntrancePalletId, SlpExitPalletId, SystemMakerPalletId,
+	SystemStakingPalletId, TreasuryPalletId, VBNCConvertPalletId,
 };
 pub use frame_support::{
 	construct_runtime, match_types, parameter_types,
@@ -94,7 +97,7 @@ pub use bifrost_runtime_common::{
 };
 use bifrost_slp::QueryId;
 use constants::currency::*;
-use cumulus_pallet_parachain_system::{RelayNumberStrictlyIncreases, RelaychainDataProvider};
+use cumulus_pallet_parachain_system::{RelayNumberMonotonicallyIncreases, RelaychainDataProvider};
 use cumulus_primitives_core::AggregateMessageOrigin;
 use frame_support::{
 	dispatch::DispatchClass,
@@ -106,6 +109,7 @@ use frame_support::{
 		Currency, EitherOf, EitherOfDiverse, Get, Imbalance, InsideBoth, LinearStoragePrice,
 		LockIdentifier, OnUnbalanced,
 	},
+	weights::WeightToFee as _,
 };
 use frame_system::{EnsureRoot, EnsureRootWithSuccess, EnsureSigned};
 use hex_literal::hex;
@@ -130,16 +134,23 @@ use governance::{
 
 // xcm config
 pub mod xcm_config;
-use bifrost_primitives::MoonriverChainId;
+use bifrost_primitives::{MoonriverChainId, OraclePriceProvider};
 use bifrost_runtime_common::currency_converter::CurrencyIdConvert;
 use pallet_xcm::{EnsureResponse, QueryStatus};
 use sp_runtime::traits::{IdentityLookup, Verify};
-use xcm::{v3::MultiLocation, v4::prelude::*};
+use xcm::{
+	v3::MultiLocation, v4::prelude::*, IntoVersion, VersionedAssetId, VersionedAssets,
+	VersionedLocation, VersionedXcm,
+};
 pub use xcm_config::{
 	AccountId32Aliases, BifrostTreasuryAccount, ExistentialDeposits, MultiCurrency, Sibling,
 	SiblingParachainConvertsVia, XcmConfig, XcmRouter,
 };
 use xcm_executor::{traits::QueryHandler, XcmExecutor};
+use xcm_fee_payment_runtime_api::{
+	dry_run::{CallDryRunEffects, Error as XcmDryRunApiError, XcmDryRunEffects},
+	fees::Error as XcmPaymentApiError,
+};
 
 impl_opaque_keys! {
 	pub struct SessionKeys {
@@ -153,7 +164,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	spec_name: create_runtime_str!("bifrost"),
 	impl_name: create_runtime_str!("bifrost"),
 	authoring_version: 1,
-	spec_version: 14000,
+	spec_version: 15000,
 	impl_version: 0,
 	apis: RUNTIME_API_VERSIONS,
 	transaction_version: 1,
@@ -220,11 +231,98 @@ parameter_types! {
 	pub const StableAssetPalletId: PalletId = PalletId(*b"bf/stabl");
 }
 
+pub struct CallFilter;
+impl Contains<RuntimeCall> for CallFilter {
+	fn contains(call: &RuntimeCall) -> bool {
+		// Allow core system calls
+		if matches!(
+			call,
+			RuntimeCall::System(_) | RuntimeCall::Timestamp(_) | RuntimeCall::ParachainSystem(_)
+		) {
+			return true;
+		}
+
+		// Check for disabled transfer calls
+		if matches!(
+			call,
+			RuntimeCall::Tokens(_) | RuntimeCall::StablePool(_) | RuntimeCall::ZenlinkProtocol(_)
+		) {
+			let is_disabled = match call {
+				// Disable specific `transfer`, `transfer_all`, and `transfer_keep_alive` calls for
+				// certain currencies
+				RuntimeCall::Tokens(orml_tokens::Call::transfer { currency_id, .. }) |
+				RuntimeCall::Tokens(orml_tokens::Call::transfer_all { currency_id, .. }) |
+				RuntimeCall::Tokens(orml_tokens::Call::transfer_keep_alive {
+					currency_id, ..
+				}) => [VBNC, BLP_BNC_VBNC, LP_BNC_VBNC].contains(currency_id),
+
+				// Disable StablePool calls with pool_id equal to 2
+				RuntimeCall::StablePool(bifrost_stable_pool::Call::add_liquidity {
+					pool_id,
+					..
+				}) |
+				RuntimeCall::StablePool(bifrost_stable_pool::Call::swap { pool_id, .. }) |
+				RuntimeCall::StablePool(bifrost_stable_pool::Call::redeem_proportion {
+					pool_id,
+					..
+				}) |
+				RuntimeCall::StablePool(bifrost_stable_pool::Call::redeem_single {
+					pool_id,
+					..
+				}) |
+				RuntimeCall::StablePool(bifrost_stable_pool::Call::redeem_multi {
+					pool_id,
+					..
+				}) => *pool_id == 2,
+
+				// Disable ZenlinkProtocol calls involving specific VBNC assets
+				RuntimeCall::ZenlinkProtocol(zenlink_protocol::Call::transfer {
+					asset_id, ..
+				}) => *asset_id == KUSAMA_VBNC_ASSET_INDEX || *asset_id == KUSAMA_VBNC_LP_ASSET_INDEX,
+
+				RuntimeCall::ZenlinkProtocol(zenlink_protocol::Call::add_liquidity {
+					asset_0,
+					asset_1,
+					..
+				}) |
+				RuntimeCall::ZenlinkProtocol(zenlink_protocol::Call::remove_liquidity {
+					asset_0,
+					asset_1,
+					..
+				}) |
+				RuntimeCall::ZenlinkProtocol(zenlink_protocol::Call::bootstrap_claim {
+					asset_0,
+					asset_1,
+					..
+				}) => *asset_0 == KUSAMA_VBNC_ASSET_INDEX || *asset_1 == KUSAMA_VBNC_ASSET_INDEX,
+
+				// Disable ZenlinkProtocol swap calls if the path contains VBNC assets
+				RuntimeCall::ZenlinkProtocol(
+					zenlink_protocol::Call::swap_exact_assets_for_assets { path, .. },
+				) |
+				RuntimeCall::ZenlinkProtocol(
+					zenlink_protocol::Call::swap_assets_for_exact_assets { path, .. },
+				) => path.contains(&KUSAMA_VBNC_ASSET_INDEX),
+
+				_ => false,
+			};
+
+			// If the call is disabled, log it and return false
+			if is_disabled {
+				return false;
+			}
+		}
+
+		// Allow all other calls
+		true
+	}
+}
+
 impl frame_system::Config for Runtime {
 	type AccountData = pallet_balances::AccountData<Balance>;
 	/// The identifier used to distinguish between accounts.
 	type AccountId = AccountId;
-	type BaseCallFilter = InsideBoth<Everything, TxPause>;
+	type BaseCallFilter = InsideBoth<CallFilter, TxPause>;
 	/// Maximum number of block number to block hash mappings to keep (oldest pruned first).
 	type BlockHashCount = BlockHashCount;
 	type BlockLength = RuntimeBlockLength;
@@ -857,6 +955,13 @@ parameter_types! {
 	pub const RelayOrigin: AggregateMessageOrigin = AggregateMessageOrigin::Parent;
 }
 
+type ConsensusHook = cumulus_pallet_aura_ext::FixedVelocityConsensusHook<
+	Runtime,
+	RELAY_CHAIN_SLOT_DURATION_MILLIS,
+	BLOCK_PROCESSING_VELOCITY,
+	UNINCLUDED_SEGMENT_CAPACITY,
+>;
+
 impl cumulus_pallet_parachain_system::Config for Runtime {
 	type DmpQueue = frame_support::traits::EnqueueWithOrigin<MessageQueue, RelayOrigin>;
 	type RuntimeEvent = RuntimeEvent;
@@ -866,8 +971,8 @@ impl cumulus_pallet_parachain_system::Config for Runtime {
 	type ReservedXcmpWeight = ReservedXcmpWeight;
 	type SelfParaId = parachain_info::Pallet<Runtime>;
 	type XcmpMessageHandler = XcmpQueue;
-	type CheckAssociatedRelayNumber = RelayNumberStrictlyIncreases;
-	type ConsensusHook = cumulus_pallet_parachain_system::ExpectParentIncluded;
+	type CheckAssociatedRelayNumber = RelayNumberMonotonicallyIncreases;
+	type ConsensusHook = ConsensusHook;
 	type WeightInfo = cumulus_pallet_parachain_system::weights::SubstrateWeight<Runtime>;
 }
 
@@ -1275,7 +1380,7 @@ impl bifrost_system_staking::Config for Runtime {
 	type WeightInfo = weights::bifrost_system_staking::BifrostWeight<Runtime>;
 	type FarmingInfo = Farming;
 	type VtokenMintingInterface = VtokenMinting;
-	type TreasuryAccount = BifrostTreasuryAccount;
+	type BenefitReceivingAccount = BifrostTreasuryAccount;
 	type PalletId = SystemStakingPalletId;
 	type BlocksPerRound = BlocksPerRound;
 	type MaxTokenLen = MaxTokenLen;
@@ -1900,6 +2005,7 @@ pub mod migrations {
 		>,
 		// permanent migration, do not remove
 		pallet_xcm::migration::MigrateToLatestXcmVersion<Runtime>,
+		bifrost_flexible_fee::migrations::v3::MigrateToV3<Runtime>,
 	);
 }
 
@@ -2054,11 +2160,63 @@ impl_runtime_apis! {
 
 	impl sp_consensus_aura::AuraApi<Block, AuraId> for Runtime {
 		fn slot_duration() -> sp_consensus_aura::SlotDuration {
-			sp_consensus_aura::SlotDuration::from_millis(Aura::slot_duration())
+			sp_consensus_aura::SlotDuration::from_millis(SLOT_DURATION)
 		}
 
 		fn authorities() -> Vec<AuraId> {
 			pallet_aura::Authorities::<Runtime>::get().into_inner()
+		}
+	}
+
+	impl cumulus_primitives_aura::AuraUnincludedSegmentApi<Block> for Runtime {
+		fn can_build_upon(
+			included_hash: <Block as BlockT>::Hash,
+			slot: cumulus_primitives_aura::Slot,
+		) -> bool {
+			ConsensusHook::can_build_upon(included_hash, slot)
+		}
+	}
+
+	impl xcm_fee_payment_runtime_api::fees::XcmPaymentApi<Block> for Runtime {
+		fn query_acceptable_payment_assets(xcm_version: xcm::Version) -> Result<Vec<VersionedAssetId>, XcmPaymentApiError> {
+			let acceptable_assets = AssetRegistry::asset_ids();
+			PolkadotXcm::query_acceptable_payment_assets(xcm_version, acceptable_assets)
+		}
+
+		fn query_weight_to_asset_fee(weight: Weight, asset: VersionedAssetId) -> Result<u128, XcmPaymentApiError> {
+			let asset = asset
+				.into_version(4)
+				.map_err(|_| XcmPaymentApiError::VersionedConversionFailed)?;
+			let bnc_asset = VersionedAssetId::V4(LocalBncLocation::get().into());
+
+			if asset == bnc_asset {
+				// for native token
+				Ok(WeightToFee::weight_to_fee(&weight))
+			} else {
+				let native_fee = WeightToFee::weight_to_fee(&weight);
+				let asset_location = &asset.try_as::<AssetId>().map_err(|_| XcmPaymentApiError::VersionedConversionFailed)?.0;
+				let asset_currency = AssetIdMaps::<Runtime>::get_currency_id(&asset_location).ok_or(XcmPaymentApiError::AssetNotFound)?;
+				let asset_fee = Prices::get_oracle_amount_by_currency_and_amount_in(&bifrost_primitives::BNC, native_fee, &asset_currency).ok_or(XcmPaymentApiError::AssetNotFound)?.0;
+				Ok(asset_fee)
+			}
+		}
+
+		fn query_xcm_weight(message: VersionedXcm<()>) -> Result<Weight, XcmPaymentApiError> {
+			PolkadotXcm::query_xcm_weight(message)
+		}
+
+		fn query_delivery_fees(destination: VersionedLocation, message: VersionedXcm<()>) -> Result<VersionedAssets, XcmPaymentApiError> {
+			PolkadotXcm::query_delivery_fees(destination, message)
+		}
+	}
+
+	impl xcm_fee_payment_runtime_api::dry_run::DryRunApi<Block, RuntimeCall, RuntimeEvent, OriginCaller> for Runtime {
+		fn dry_run_call(origin: OriginCaller, call: RuntimeCall) -> Result<CallDryRunEffects<RuntimeEvent>, XcmDryRunApiError> {
+			PolkadotXcm::dry_run_call::<Runtime, XcmRouter, OriginCaller, RuntimeCall>(origin, call)
+		}
+
+		fn dry_run_xcm(origin_location: VersionedLocation, xcm: VersionedXcm<RuntimeCall>) -> Result<XcmDryRunEffects<RuntimeEvent>, XcmDryRunApiError> {
+			PolkadotXcm::dry_run_xcm::<Runtime, XcmRouter, RuntimeCall, XcmConfig>(origin_location, xcm)
 		}
 	}
 
@@ -2336,31 +2494,7 @@ impl_runtime_apis! {
 	}
 }
 
-struct CheckInherents;
-#[allow(deprecated)]
-impl cumulus_pallet_parachain_system::CheckInherents<Block> for CheckInherents {
-	fn check_inherents(
-		block: &Block,
-		relay_state_proof: &cumulus_pallet_parachain_system::RelayChainStateProof,
-	) -> sp_inherents::CheckInherentsResult {
-		let relay_chain_slot = relay_state_proof
-			.read_slot()
-			.expect("Could not read the relay chain slot from the proof");
-
-		let inherent_data =
-			cumulus_primitives_timestamp::InherentDataProvider::from_relay_chain_slot_and_duration(
-				relay_chain_slot,
-				sp_std::time::Duration::from_secs(6),
-			)
-			.create_inherent_data()
-			.expect("Could not create the timestamp inherent data");
-
-		inherent_data.check_extrinsics(&block)
-	}
-}
-
 cumulus_pallet_parachain_system::register_validate_block! {
 	Runtime = Runtime,
-	BlockExecutor = cumulus_pallet_aura_ext::BlockExecutor::<Runtime, Executive>,
-	CheckInherents = CheckInherents,
+	BlockExecutor = cumulus_pallet_aura_ext::BlockExecutor::<Runtime, Executive>
 }

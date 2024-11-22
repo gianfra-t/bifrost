@@ -42,6 +42,15 @@ pub mod time {
 	pub const DAYS: BlockNumber = HOURS * 24;
 	pub const WEEKS: BlockNumber = DAYS * 7;
 
+	/// Maximum number of blocks simultaneously accepted by the Runtime, not yet included into the
+	/// relay chain.
+	pub const UNINCLUDED_SEGMENT_CAPACITY: u32 = 1;
+	/// How many parachain blocks are processed by the relay chain per parent. Limits the number of
+	/// blocks authored per slot.
+	pub const BLOCK_PROCESSING_VELOCITY: u32 = 1;
+	/// Relay chain slot duration, in milliseconds.
+	pub const RELAY_CHAIN_SLOT_DURATION_MILLIS: u32 = 6000;
+
 	// The `LeasePeriod` defination from `polkadot`.
 	pub const POLKA_LEASE_PERIOD: BlockNumber = 12 * WEEKS;
 	pub const KUSAMA_LEASE_PERIOD: BlockNumber = 6 * WEEKS;

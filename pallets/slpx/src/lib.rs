@@ -110,11 +110,7 @@ pub mod pallet {
 		/// Send Xcm
 		type XcmSender: SendXcm;
 		/// Convert Location to `T::CurrencyId`.
-		type CurrencyIdConvert: CurrencyIdMapping<
-			CurrencyId,
-			xcm::v3::MultiLocation,
-			AssetMetadata<BalanceOf<Self>>,
-		>;
+		type CurrencyIdConvert: CurrencyIdMapping<CurrencyId, AssetMetadata<BalanceOf<Self>>>;
 		/// TreasuryAccount
 		#[pallet::constant]
 		type TreasuryAccount: Get<AccountIdOf<Self>>;

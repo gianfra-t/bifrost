@@ -19,55 +19,101 @@
 // Ensure we're `no_std` when compiling for Wasm.
 #![cfg(feature = "runtime-benchmarks")]
 
-use frame_benchmarking::{account, benchmarks, v1::BenchmarkError};
-use frame_support::{assert_ok, traits::EnsureOrigin};
-
+use crate::{BalanceOf, Call, Config, Pallet as BbBNC, Pallet};
 use bifrost_primitives::{CurrencyId, TokenSymbol};
+use frame_benchmarking::v2::*;
+use frame_support::{assert_ok, traits::EnsureOrigin};
 use frame_system::RawOrigin;
+use orml_traits::MultiCurrency;
 use sp_runtime::traits::UniqueSaturatedFrom;
 use sp_std::vec;
 
-use crate::{BalanceOf, Call, Config, Pallet as BbBNC, Pallet};
-use orml_traits::MultiCurrency;
+#[benchmarks]
+mod benchmarks {
+	use super::*;
 
-benchmarks! {
-	set_config {
-	}: _(RawOrigin::Root,
-		Some((4 * 365 * 86400 / 12u32).into()),
-			Some((7 * 86400 / 12u32).into()))
+	#[benchmark]
+	fn set_config() -> Result<(), BenchmarkError> {
+		#[extrinsic_call]
+		_(
+			RawOrigin::Root,
+			Some((4 * 365 * 86400 / 12u32).into()),
+			Some((7 * 86400 / 12u32).into()),
+		);
 
-	create_lock {
-		let test_account: T::AccountId = account("seed",1,1);
+		Ok(())
+	}
+
+	#[benchmark]
+	fn create_lock() -> Result<(), BenchmarkError> {
+		let test_account: T::AccountId = account("seed", 1, 1);
+
 		assert_ok!(BbBNC::<T>::set_config(
 			RawOrigin::Root.into(),
 			Some((4 * 365 * 86400 / 12u32).into()),
 			Some((7 * 86400 / 12u32).into())
 		));
-		T::MultiCurrency::deposit(CurrencyId::Native(TokenSymbol::BNC), &test_account, BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128))?;
-		T::MultiCurrency::deposit(CurrencyId::VToken(TokenSymbol::BNC), &test_account, BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128))?;
-		let rewards = vec![(CurrencyId::Native(TokenSymbol::BNC), BalanceOf::<T>::unique_saturated_from(10_000_000_000_000u128))];
+
+		T::MultiCurrency::deposit(
+			CurrencyId::Native(TokenSymbol::BNC),
+			&test_account,
+			BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128),
+		)?;
+
+		T::MultiCurrency::deposit(
+			CurrencyId::VToken(TokenSymbol::BNC),
+			&test_account,
+			BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128),
+		)?;
+
+		let rewards = vec![CurrencyId::Native(TokenSymbol::BNC)];
+
 		assert_ok!(BbBNC::<T>::notify_rewards(
 			T::ControlOrigin::try_successful_origin().map_err(|_| BenchmarkError::Weightless)?,
-			account("seed",1,1),
-			Some((7 * 86400 / 12u32).into()),rewards
+			account("seed", 1, 1),
+			Some((7 * 86400 / 12u32).into()),
+			rewards
 		));
 
-	}: _(RawOrigin::Signed(test_account),BalanceOf::<T>::unique_saturated_from(50000000000u128),(365 * 86400 / 12u32).into())
+		#[extrinsic_call]
+		_(
+			RawOrigin::Signed(test_account),
+			BalanceOf::<T>::unique_saturated_from(50000000000u128),
+			(365 * 86400 / 12u32).into(),
+		);
 
-	increase_amount {
-		let test_account: T::AccountId = account("seed",1,1);
+		Ok(())
+	}
+
+	#[benchmark]
+	fn increase_amount() -> Result<(), BenchmarkError> {
+		let test_account: T::AccountId = account("seed", 1, 1);
+
 		assert_ok!(BbBNC::<T>::set_config(
 			RawOrigin::Root.into(),
 			Some((4 * 365 * 86400 / 12u32).into()),
 			Some((7 * 86400 / 12u32).into())
 		));
-		T::MultiCurrency::deposit(CurrencyId::Native(TokenSymbol::BNC), &test_account, BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128))?;
-		T::MultiCurrency::deposit(CurrencyId::VToken(TokenSymbol::BNC), &test_account, BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128))?;
-		let rewards = vec![(CurrencyId::Native(TokenSymbol::BNC), BalanceOf::<T>::unique_saturated_from(10_000_000_000_000u128))];
+
+		T::MultiCurrency::deposit(
+			CurrencyId::Native(TokenSymbol::BNC),
+			&test_account,
+			BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128),
+		)?;
+
+		T::MultiCurrency::deposit(
+			CurrencyId::VToken(TokenSymbol::BNC),
+			&test_account,
+			BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128),
+		)?;
+
+		let rewards = vec![CurrencyId::Native(TokenSymbol::BNC)];
+
 		assert_ok!(BbBNC::<T>::notify_rewards(
 			T::ControlOrigin::try_successful_origin().map_err(|_| BenchmarkError::Weightless)?,
-			account("seed",1,1),
-			Some((7 * 86400 / 12u32).into()),rewards
+			account("seed", 1, 1),
+			Some((7 * 86400 / 12u32).into()),
+			rewards
 		));
 
 		assert_ok!(BbBNC::<T>::create_lock(
@@ -76,22 +122,45 @@ benchmarks! {
 			(365 * 86400 / 12u32).into()
 		));
 
-	}: _(RawOrigin::Signed(test_account),0,BalanceOf::<T>::unique_saturated_from(50000000000u128))
+		#[extrinsic_call]
+		_(
+			RawOrigin::Signed(test_account),
+			0,
+			BalanceOf::<T>::unique_saturated_from(50000000000u128),
+		);
 
-	increase_unlock_time {
-		let test_account: T::AccountId = account("seed",1,1);
+		Ok(())
+	}
+
+	#[benchmark]
+	fn increase_unlock_time() -> Result<(), BenchmarkError> {
+		let test_account: T::AccountId = account("seed", 1, 1);
+
 		assert_ok!(BbBNC::<T>::set_config(
 			RawOrigin::Root.into(),
 			Some((4 * 365 * 86400 / 12u32).into()),
 			Some((7 * 86400 / 12u32).into())
 		));
-		T::MultiCurrency::deposit(CurrencyId::Native(TokenSymbol::BNC), &test_account, BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128))?;
-		T::MultiCurrency::deposit(CurrencyId::VToken(TokenSymbol::BNC), &test_account, BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128))?;
-		let rewards = vec![(CurrencyId::Native(TokenSymbol::BNC), BalanceOf::<T>::unique_saturated_from(10_000_000_000_000u128))];
+
+		T::MultiCurrency::deposit(
+			CurrencyId::Native(TokenSymbol::BNC),
+			&test_account,
+			BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128),
+		)?;
+
+		T::MultiCurrency::deposit(
+			CurrencyId::VToken(TokenSymbol::BNC),
+			&test_account,
+			BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128),
+		)?;
+
+		let rewards = vec![CurrencyId::Native(TokenSymbol::BNC)];
+
 		assert_ok!(BbBNC::<T>::notify_rewards(
 			T::ControlOrigin::try_successful_origin().map_err(|_| BenchmarkError::Weightless)?,
-			account("seed",1,1),
-			Some((7 * 86400 / 12u32).into()),rewards
+			account("seed", 1, 1),
+			Some((7 * 86400 / 12u32).into()),
+			rewards
 		));
 
 		assert_ok!(BbBNC::<T>::create_lock(
@@ -100,22 +169,41 @@ benchmarks! {
 			(365 * 86400 / 12u32).into()
 		));
 
-	}: _(RawOrigin::Signed(test_account),0,(7 * 86400 / 12u32 + 365 * 86400 / 12u32).into())
+		#[extrinsic_call]
+		_(RawOrigin::Signed(test_account), 0, (7 * 86400 / 12u32 + 365 * 86400 / 12u32).into());
 
-	withdraw {
-		let test_account: T::AccountId = account("seed",1,1);
+		Ok(())
+	}
+
+	#[benchmark]
+	fn withdraw() -> Result<(), BenchmarkError> {
+		let test_account: T::AccountId = account("seed", 1, 1);
+
 		assert_ok!(BbBNC::<T>::set_config(
 			T::ControlOrigin::try_successful_origin().map_err(|_| BenchmarkError::Weightless)?,
 			Some((4 * 365 * 86400 / 12u32).into()),
 			Some((7 * 86400 / 12u32).into())
 		));
-		T::MultiCurrency::deposit(CurrencyId::Native(TokenSymbol::BNC), &test_account, BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128))?;
-		T::MultiCurrency::deposit(CurrencyId::VToken(TokenSymbol::BNC), &test_account, BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128))?;
-		let rewards = vec![(CurrencyId::Native(TokenSymbol::BNC), BalanceOf::<T>::unique_saturated_from(10_000_000_000_000u128))];
+
+		T::MultiCurrency::deposit(
+			CurrencyId::Native(TokenSymbol::BNC),
+			&test_account,
+			BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128),
+		)?;
+
+		T::MultiCurrency::deposit(
+			CurrencyId::VToken(TokenSymbol::BNC),
+			&test_account,
+			BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128),
+		)?;
+
+		let rewards = vec![CurrencyId::Native(TokenSymbol::BNC)];
+
 		assert_ok!(BbBNC::<T>::notify_rewards(
 			T::ControlOrigin::try_successful_origin().map_err(|_| BenchmarkError::Weightless)?,
-			account("seed",1,1),
-			Some((7 * 86400 / 12u32).into()),rewards
+			account("seed", 1, 1),
+			Some((7 * 86400 / 12u32).into()),
+			rewards
 		));
 
 		assert_ok!(BbBNC::<T>::create_lock(
@@ -126,22 +214,41 @@ benchmarks! {
 
 		<frame_system::Pallet<T>>::set_block_number((2 * 365 * 86400 / 12u32).into());
 
-	}: _(RawOrigin::Signed(test_account),0)
+		#[extrinsic_call]
+		_(RawOrigin::Signed(test_account), 0);
 
-	get_rewards {
-		let test_account: T::AccountId = account("seed",1,1);
+		Ok(())
+	}
+
+	#[benchmark]
+	fn get_rewards() -> Result<(), BenchmarkError> {
+		let test_account: T::AccountId = account("seed", 1, 1);
+
 		assert_ok!(BbBNC::<T>::set_config(
 			RawOrigin::Root.into(),
 			Some((4 * 365 * 86400 / 12u32).into()),
 			Some((7 * 86400 / 12u32).into())
 		));
-		T::MultiCurrency::deposit(CurrencyId::Native(TokenSymbol::BNC), &test_account, BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128))?;
-		T::MultiCurrency::deposit(CurrencyId::VToken(TokenSymbol::BNC), &test_account, BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128))?;
-		let rewards = vec![(CurrencyId::Native(TokenSymbol::BNC), BalanceOf::<T>::unique_saturated_from(10_000_000_000_000u128))];
+
+		T::MultiCurrency::deposit(
+			CurrencyId::Native(TokenSymbol::BNC),
+			&test_account,
+			BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128),
+		)?;
+
+		T::MultiCurrency::deposit(
+			CurrencyId::VToken(TokenSymbol::BNC),
+			&test_account,
+			BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128),
+		)?;
+
+		let rewards = vec![CurrencyId::Native(TokenSymbol::BNC)];
+
 		assert_ok!(BbBNC::<T>::notify_rewards(
 			T::ControlOrigin::try_successful_origin().map_err(|_| BenchmarkError::Weightless)?,
-			account("seed",1,1),
-			Some((7 * 86400 / 12u32).into()),rewards
+			account("seed", 1, 1),
+			Some((7 * 86400 / 12u32).into()),
+			rewards
 		));
 
 		assert_ok!(BbBNC::<T>::create_lock(
@@ -152,41 +259,87 @@ benchmarks! {
 
 		<frame_system::Pallet<T>>::set_block_number((2 * 365 * 86400 / 12u32).into());
 
-	}: _(RawOrigin::Signed(test_account))
+		#[extrinsic_call]
+		_(RawOrigin::Signed(test_account));
 
-	notify_rewards {
+		Ok(())
+	}
+	#[benchmark]
+	fn notify_rewards() -> Result<(), BenchmarkError> {
 		assert_ok!(BbBNC::<T>::set_config(
 			RawOrigin::Root.into(),
 			Some((4 * 365 * 86400 / 12u32).into()),
 			Some((7 * 86400 / 12u32).into())
 		));
-		let rewards = vec![(CurrencyId::Native(TokenSymbol::BNC), BalanceOf::<T>::unique_saturated_from(10_000_000_000_000u128))];
-		T::MultiCurrency::deposit(CurrencyId::Native(TokenSymbol::BNC), &account("seed",1,1), BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128))?;
-	}: _(RawOrigin::Root,account("seed",1,1),Some((7 * 86400 / 12u32).into()),rewards)
 
-	set_markup_coefficient {
+		let rewards = vec![CurrencyId::Native(TokenSymbol::BNC)];
+
+		T::MultiCurrency::deposit(
+			CurrencyId::Native(TokenSymbol::BNC),
+			&account("seed", 1, 1),
+			BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128),
+		)?;
+
+		#[extrinsic_call]
+		_(RawOrigin::Root, account("seed", 1, 1), Some((7 * 86400 / 12u32).into()), rewards);
+
+		Ok(())
+	}
+
+	#[benchmark]
+	fn set_markup_coefficient() -> Result<(), BenchmarkError> {
 		assert_ok!(BbBNC::<T>::set_config(
 			RawOrigin::Root.into(),
 			Some((4 * 365 * 86400 / 12u32).into()),
 			Some((7 * 86400 / 12u32).into())
 		));
-		T::MultiCurrency::deposit(CurrencyId::Native(TokenSymbol::BNC), &account("seed",1,1), BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128))?;
-	}: _(RawOrigin::Root, CurrencyId::VToken(TokenSymbol::BNC), 10_000.into(), 10_000_000_000_000.into())
 
-	deposit_markup {
-		let test_account: T::AccountId = account("seed",1,1);
+		T::MultiCurrency::deposit(
+			CurrencyId::Native(TokenSymbol::BNC),
+			&account("seed", 1, 1),
+			BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128),
+		)?;
+
+		#[extrinsic_call]
+		_(
+			RawOrigin::Root,
+			CurrencyId::VToken(TokenSymbol::BNC),
+			10_000.into(),
+			10_000_000_000_000.into(),
+		);
+
+		Ok(())
+	}
+
+	#[benchmark]
+	fn deposit_markup() -> Result<(), BenchmarkError> {
+		let test_account: T::AccountId = account("seed", 1, 1);
+
 		assert_ok!(BbBNC::<T>::set_config(
 			RawOrigin::Root.into(),
 			Some((4 * 365 * 86400 / 12u32).into()),
 			Some((7 * 86400 / 12u32).into())
 		));
-		T::MultiCurrency::deposit(CurrencyId::Native(TokenSymbol::BNC), &test_account, BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128))?;
-		T::MultiCurrency::deposit(CurrencyId::VToken(TokenSymbol::BNC), &test_account, BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128))?;
-		let rewards = vec![(CurrencyId::Native(TokenSymbol::BNC), BalanceOf::<T>::unique_saturated_from(10_000_000_000_000u128))];
+
+		T::MultiCurrency::deposit(
+			CurrencyId::Native(TokenSymbol::BNC),
+			&test_account,
+			BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128),
+		)?;
+
+		T::MultiCurrency::deposit(
+			CurrencyId::VToken(TokenSymbol::BNC),
+			&test_account,
+			BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128),
+		)?;
+
+		let rewards = vec![CurrencyId::Native(TokenSymbol::BNC)];
+
 		assert_ok!(BbBNC::<T>::notify_rewards(
 			T::ControlOrigin::try_successful_origin().map_err(|_| BenchmarkError::Weightless)?,
-			account("seed",1,1),
-			Some((7 * 86400 / 12u32).into()),rewards
+			account("seed", 1, 1),
+			Some((7 * 86400 / 12u32).into()),
+			rewards
 		));
 
 		assert_ok!(BbBNC::<T>::create_lock(
@@ -194,30 +347,54 @@ benchmarks! {
 			BalanceOf::<T>::unique_saturated_from(10_000_000_000_000u128),
 			(365 * 86400 / 12u32).into()
 		));
+
 		assert_ok!(BbBNC::<T>::set_markup_coefficient(
 			RawOrigin::Root.into(),
 			CurrencyId::VToken(TokenSymbol::BNC),
 			1_000.into(),
 			10_000_000_000_000.into()
 		));
+
 		<frame_system::Pallet<T>>::set_block_number((2 * 365 * 86400 / 12u32).into());
 
-	}: _(RawOrigin::Signed(test_account), CurrencyId::VToken(TokenSymbol::BNC), BalanceOf::<T>::unique_saturated_from(10_000_000_000_000u128))
+		#[extrinsic_call]
+		_(
+			RawOrigin::Signed(test_account),
+			CurrencyId::VToken(TokenSymbol::BNC),
+			BalanceOf::<T>::unique_saturated_from(10_000_000_000_000u128),
+		);
 
-	withdraw_markup {
-		let test_account: T::AccountId = account("seed",1,1);
+		Ok(())
+	}
+	#[benchmark]
+	fn withdraw_markup() -> Result<(), BenchmarkError> {
+		let test_account: T::AccountId = account("seed", 1, 1);
+
 		assert_ok!(BbBNC::<T>::set_config(
 			RawOrigin::Root.into(),
 			Some((4 * 365 * 86400 / 12u32).into()),
 			Some((7 * 86400 / 12u32).into())
 		));
-		T::MultiCurrency::deposit(CurrencyId::Native(TokenSymbol::BNC), &test_account, BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128))?;
-		T::MultiCurrency::deposit(CurrencyId::VToken(TokenSymbol::BNC), &test_account, BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128))?;
-		let rewards = vec![(CurrencyId::Native(TokenSymbol::BNC), BalanceOf::<T>::unique_saturated_from(10_000_000_000_000u128))];
+
+		T::MultiCurrency::deposit(
+			CurrencyId::Native(TokenSymbol::BNC),
+			&test_account,
+			BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128),
+		)?;
+
+		T::MultiCurrency::deposit(
+			CurrencyId::VToken(TokenSymbol::BNC),
+			&test_account,
+			BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128),
+		)?;
+
+		let rewards = vec![CurrencyId::Native(TokenSymbol::BNC)];
+
 		assert_ok!(BbBNC::<T>::notify_rewards(
 			T::ControlOrigin::try_successful_origin().map_err(|_| BenchmarkError::Weightless)?,
-			account("seed",1,1),
-			Some((7 * 86400 / 12u32).into()),rewards
+			account("seed", 1, 1),
+			Some((7 * 86400 / 12u32).into()),
+			rewards
 		));
 
 		assert_ok!(BbBNC::<T>::create_lock(
@@ -225,31 +402,57 @@ benchmarks! {
 			BalanceOf::<T>::unique_saturated_from(10_000_000_000_000u128),
 			(365 * 86400 / 12u32).into()
 		));
+
 		assert_ok!(BbBNC::<T>::set_markup_coefficient(
 			RawOrigin::Root.into(),
 			CurrencyId::VToken(TokenSymbol::BNC),
 			1_000.into(),
 			10_000_000_000_000.into()
 		));
-		assert_ok!(BbBNC::<T>::deposit_markup(RawOrigin::Signed(test_account.clone()).into(), CurrencyId::VToken(TokenSymbol::BNC), BalanceOf::<T>::unique_saturated_from(10_000_000_000_000u128)));
+
+		assert_ok!(BbBNC::<T>::deposit_markup(
+			RawOrigin::Signed(test_account.clone()).into(),
+			CurrencyId::VToken(TokenSymbol::BNC),
+			BalanceOf::<T>::unique_saturated_from(10_000_000_000_000u128)
+		));
+
 		<frame_system::Pallet<T>>::set_block_number((2 * 365 * 86400 / 12u32).into());
 
-	}: _(RawOrigin::Signed(test_account), CurrencyId::VToken(TokenSymbol::BNC))
+		#[extrinsic_call]
+		_(RawOrigin::Signed(test_account), CurrencyId::VToken(TokenSymbol::BNC));
 
-	redeem_unlock {
-		let test_account: T::AccountId = account("seed",1,1);
+		Ok(())
+	}
+
+	#[benchmark]
+	fn redeem_unlock() -> Result<(), BenchmarkError> {
+		let test_account: T::AccountId = account("seed", 1, 1);
+
 		assert_ok!(BbBNC::<T>::set_config(
 			RawOrigin::Root.into(),
 			Some((4 * 365 * 86400 / 12u32).into()),
 			Some((7 * 86400 / 12u32).into())
 		));
-		T::MultiCurrency::deposit(CurrencyId::Native(TokenSymbol::BNC), &test_account, BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128))?;
-		T::MultiCurrency::deposit(CurrencyId::VToken(TokenSymbol::BNC), &test_account, BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128))?;
-		let rewards = vec![(CurrencyId::Native(TokenSymbol::BNC), BalanceOf::<T>::unique_saturated_from(10_000_000_000_000u128))];
+
+		T::MultiCurrency::deposit(
+			CurrencyId::Native(TokenSymbol::BNC),
+			&test_account,
+			BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128),
+		)?;
+
+		T::MultiCurrency::deposit(
+			CurrencyId::VToken(TokenSymbol::BNC),
+			&test_account,
+			BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128),
+		)?;
+
+		let rewards = vec![CurrencyId::Native(TokenSymbol::BNC)];
+
 		assert_ok!(BbBNC::<T>::notify_rewards(
 			T::ControlOrigin::try_successful_origin().map_err(|_| BenchmarkError::Weightless)?,
-			account("seed",1,1),
-			Some((7 * 86400 / 12u32).into()),rewards
+			account("seed", 1, 1),
+			Some((7 * 86400 / 12u32).into()),
+			rewards
 		));
 
 		assert_ok!(BbBNC::<T>::create_lock(
@@ -257,31 +460,57 @@ benchmarks! {
 			BalanceOf::<T>::unique_saturated_from(10_000_000_000_000u128),
 			(365 * 86400 / 12u32).into()
 		));
+
 		assert_ok!(BbBNC::<T>::set_markup_coefficient(
 			RawOrigin::Root.into(),
 			CurrencyId::VToken(TokenSymbol::BNC),
 			1_000.into(),
 			10_000_000_000_000.into()
 		));
-		assert_ok!(BbBNC::<T>::deposit_markup(RawOrigin::Signed(test_account.clone()).into(), CurrencyId::VToken(TokenSymbol::BNC), BalanceOf::<T>::unique_saturated_from(10_000_000_000_000u128)));
+
+		assert_ok!(BbBNC::<T>::deposit_markup(
+			RawOrigin::Signed(test_account.clone()).into(),
+			CurrencyId::VToken(TokenSymbol::BNC),
+			BalanceOf::<T>::unique_saturated_from(10_000_000_000_000u128)
+		));
+
 		<frame_system::Pallet<T>>::set_block_number((2 * 86400 / 12u32).into());
 
-	}: _(RawOrigin::Signed(test_account), 0)
+		#[extrinsic_call]
+		_(RawOrigin::Signed(test_account), 0);
 
-	refresh {
-		let test_account: T::AccountId = account("seed",1,1);
+		Ok(())
+	}
+
+	#[benchmark]
+	fn refresh() -> Result<(), BenchmarkError> {
+		let test_account: T::AccountId = account("seed", 1, 1);
+
 		assert_ok!(BbBNC::<T>::set_config(
 			RawOrigin::Root.into(),
 			Some((4 * 365 * 86400 / 12u32).into()),
 			Some((7 * 86400 / 12u32).into())
 		));
-		T::MultiCurrency::deposit(CurrencyId::Native(TokenSymbol::BNC), &test_account, BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128))?;
-		T::MultiCurrency::deposit(CurrencyId::VToken(TokenSymbol::BNC), &test_account, BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128))?;
-		let rewards = vec![(CurrencyId::Native(TokenSymbol::BNC), BalanceOf::<T>::unique_saturated_from(10_000_000_000_000u128))];
+
+		T::MultiCurrency::deposit(
+			CurrencyId::Native(TokenSymbol::BNC),
+			&test_account,
+			BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128),
+		)?;
+
+		T::MultiCurrency::deposit(
+			CurrencyId::VToken(TokenSymbol::BNC),
+			&test_account,
+			BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128),
+		)?;
+
+		let rewards = vec![CurrencyId::Native(TokenSymbol::BNC)];
+
 		assert_ok!(BbBNC::<T>::notify_rewards(
 			T::ControlOrigin::try_successful_origin().map_err(|_| BenchmarkError::Weightless)?,
-			account("seed",1,1),
-			Some((7 * 86400 / 12u32).into()),rewards
+			account("seed", 1, 1),
+			Some((7 * 86400 / 12u32).into()),
+			rewards
 		));
 
 		assert_ok!(BbBNC::<T>::create_lock(
@@ -289,16 +518,27 @@ benchmarks! {
 			BalanceOf::<T>::unique_saturated_from(10_000_000_000_000u128),
 			(365 * 86400 / 12u32).into()
 		));
+
 		assert_ok!(BbBNC::<T>::set_markup_coefficient(
 			RawOrigin::Root.into(),
 			CurrencyId::VToken(TokenSymbol::BNC),
 			1_000.into(),
 			10_000_000_000_000.into()
 		));
-		assert_ok!(BbBNC::<T>::deposit_markup(RawOrigin::Signed(test_account.clone()).into(), CurrencyId::VToken(TokenSymbol::BNC), BalanceOf::<T>::unique_saturated_from(10_000_000_000_000u128)));
+
+		assert_ok!(BbBNC::<T>::deposit_markup(
+			RawOrigin::Signed(test_account.clone()).into(),
+			CurrencyId::VToken(TokenSymbol::BNC),
+			BalanceOf::<T>::unique_saturated_from(10_000_000_000_000u128)
+		));
+
 		<frame_system::Pallet<T>>::set_block_number((2 * 86400 / 12u32).into());
 
-	}: _(RawOrigin::Signed(test_account), CurrencyId::VToken(TokenSymbol::BNC))
+		#[extrinsic_call]
+		_(RawOrigin::Signed(test_account), CurrencyId::VToken(TokenSymbol::BNC));
 
-		impl_benchmark_test_suite!(BbBNC,crate::mock::ExtBuilder::default().build(),crate::mock::Runtime);
+		Ok(())
+	}
+
+	impl_benchmark_test_suite!(Pallet, crate::mock::new_test_ext_benchmark(), crate::mock::Runtime);
 }

@@ -167,11 +167,7 @@ pub mod pallet {
 		>;
 
 		// asset registry to get asset metadata
-		type AssetIdMaps: CurrencyIdMapping<
-			CurrencyId,
-			MultiLocation,
-			AssetMetadata<BalanceOf<Self>>,
-		>;
+		type AssetIdMaps: CurrencyIdMapping<CurrencyId, AssetMetadata<BalanceOf<Self>>>;
 
 		#[pallet::constant]
 		type TreasuryAccount: Get<Self::AccountId>;
@@ -2290,6 +2286,8 @@ impl<T: Config, F: Contains<CurrencyIdOf<T>>>
 		Self::get_multilocation(token, derivative_index).and_then(|location| {
 			DelegatorLedgers::<T>::get(token, location).and_then(|ledger| match ledger {
 				Ledger::Substrate(l) if F::contains(&token) => Some((l.total, l.active)),
+				Ledger::ParachainStaking(l) if F::contains(&token) =>
+					Some((l.total, l.total.checked_sub(&l.less_total).unwrap_or_default())),
 				_ => None,
 			})
 		})

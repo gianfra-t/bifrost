@@ -413,11 +413,10 @@ pub mod pallet {
 				let destruction_amount = ratio * bnc_balance_before_burn;
 				T::MultiCurrency::withdraw(BNC, &buyback_address, destruction_amount)?;
 			}
-			let bnc_balance = T::MultiCurrency::free_balance(BNC, &buyback_address);
 			T::BbBNC::notify_reward(
 				BB_BNC_SYSTEM_POOL_ID,
 				&Some(buyback_address.clone()),
-				vec![(BNC, bnc_balance)],
+				vec![BNC],
 			)
 		}
 

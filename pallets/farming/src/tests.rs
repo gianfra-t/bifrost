@@ -86,8 +86,8 @@ fn deposit() {
 			gauge_state: GaugeState::Bonded,
 		};
 		assert_eq!(GaugePoolInfos::<Runtime>::get(0), Some(gauge_pool_info2));
-		Farming::on_initialize(0);
-		Farming::on_initialize(0);
+		Farming::on_initialize(1);
+		Farming::on_initialize(1);
 		System::set_block_number(System::block_number() + 1000);
 	})
 }
@@ -173,9 +173,9 @@ fn gauge_withdraw() {
 		if let Some(gauge_pool_infos) = GaugePoolInfos::<Runtime>::get(0) {
 			assert_eq!(gauge_pool_infos.gauge_amount, 0)
 		};
-		Farming::on_initialize(0);
+		Farming::on_initialize(1);
 		System::set_block_number(System::block_number() + 1);
-		Farming::on_initialize(0);
+		Farming::on_initialize(1);
 		assert_ok!(Farming::gauge_withdraw(RuntimeOrigin::signed(ALICE), pid));
 		assert_eq!(Tokens::free_balance(KSM, &ALICE), 2018);
 		System::set_block_number(System::block_number() + 1000);
@@ -262,7 +262,7 @@ fn reset() {
 		assert_ok!(Farming::charge(RuntimeOrigin::signed(BOB), pid, charge_rewards, false));
 		assert_ok!(Farming::deposit(RuntimeOrigin::signed(ALICE), pid, 1));
 		assert_eq!(Tokens::free_balance(KSM, &ALICE), 4017);
-		Farming::on_initialize(0);
+		Farming::on_initialize(1);
 		System::set_block_number(System::block_number() + 20);
 		assert_ok!(Farming::claim(RuntimeOrigin::signed(ALICE), pid));
 		assert_eq!(Tokens::free_balance(KSM, &ALICE), 4396);
@@ -277,6 +277,13 @@ fn init_gauge() -> (PoolId, BalanceOf<Runtime>) {
 	let basic_rewards = vec![(KSM, 1000)];
 	let gauge_basic_rewards = vec![(KSM, 990_000)];
 
+	let pid = 0;
+
+	let gauge_reward_issuer: AccountId =
+		<Runtime as Config>::GaugeRewardIssuer::get().into_sub_account_truncating(pid);
+	assert_ok!(Tokens::deposit(KSM, &gauge_reward_issuer, 990_000));
+	assert_eq!(Tokens::free_balance(KSM, &gauge_reward_issuer), 990_000);
+
 	assert_ok!(Farming::create_farming_pool(
 		RuntimeOrigin::signed(ALICE),
 		tokens_proportion.clone(),
@@ -289,12 +296,10 @@ fn init_gauge() -> (PoolId, BalanceOf<Runtime>) {
 		5
 	));
 
-	let pid = 0;
 	let charge_rewards = vec![(KSM, 300000)];
 	assert_ok!(Farming::charge(RuntimeOrigin::signed(BOB), pid, charge_rewards, false));
 	assert_ok!(Farming::deposit(RuntimeOrigin::signed(ALICE), pid, tokens));
 	assert_ok!(BbBNC::set_config(RuntimeOrigin::signed(ALICE), Some(0), Some(7 * 86400 / 12)));
-	assert_ok!(BbBNC::notify_reward_amount(pid, &Some(CHARLIE), gauge_basic_rewards.clone()));
 	assert_ok!(BbBNC::create_lock_inner(
 		&ALICE,
 		100_000_000_000,
@@ -498,8 +503,6 @@ fn start_boost_round() {
 #[test]
 fn vote() {
 	ExtBuilder::default().one_hundred_for_alice_n_bob().build().execute_with(|| {
-		env_logger::try_init().unwrap_or(());
-
 		BbBNC::set_incentive(0, Some(7 * 86400 / 12), Some(ALICE.clone()));
 
 		let (pid, _tokens) = init_gauge();

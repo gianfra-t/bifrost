@@ -34,6 +34,7 @@ use sp_runtime::{
 	BoundedVec, DispatchError, DispatchResult, TypeId,
 };
 use sp_std::{cmp::Ordering, fmt::Debug, vec::Vec};
+use xcm::prelude::Location;
 
 pub trait TokenInfo {
 	fn name(&self) -> Option<&str>;
@@ -143,15 +144,15 @@ pub trait SlpxOperator<Balance> {
 }
 
 /// A mapping between CurrencyId and AssetMetadata.
-pub trait CurrencyIdMapping<CurrencyId, MultiLocation, AssetMetadata> {
+pub trait CurrencyIdMapping<CurrencyId, AssetMetadata> {
 	/// Returns the AssetMetadata associated with a given `AssetIds`.
 	fn get_asset_metadata(asset_ids: AssetIds) -> Option<AssetMetadata>;
 	/// Returns the AssetMetadata associated with a given `CurrencyId`.
 	fn get_currency_metadata(currency_id: CurrencyId) -> Option<AssetMetadata>;
 	/// Returns the Location associated with a given CurrencyId.
-	fn get_location(currency_id: CurrencyId) -> Option<xcm::v4::Location>;
+	fn get_location(currency_id: &CurrencyId) -> Option<Location>;
 	/// Returns the CurrencyId associated with a given Location.
-	fn get_currency_id(multi_location: xcm::v4::Location) -> Option<CurrencyId>;
+	fn get_currency_id(location: &Location) -> Option<CurrencyId>;
 	/// Returns all currencies in currencyMetadata.
 	fn get_all_currency() -> Vec<CurrencyId>;
 }

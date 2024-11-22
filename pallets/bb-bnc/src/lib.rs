@@ -208,7 +208,7 @@ pub mod pallet {
 				IncentiveConfig<CurrencyIdOf<T>, BalanceOf<T>, BlockNumberFor<T>, AccountIdOf<T>>,
 		},
 		/// The rewards for this round have been added to the system account.
-		RewardAdded { rewards: Vec<(CurrencyIdOf<T>, BalanceOf<T>)> },
+		RewardAdded { rewards: Vec<CurrencyIdOf<T>> },
 		/// The user has received the reward.
 		Rewarded { who: AccountIdOf<T>, rewards: Vec<(CurrencyIdOf<T>, BalanceOf<T>)> },
 		/// This currency_id has been refreshed.
@@ -216,7 +216,7 @@ pub mod pallet {
 		/// This currency_id has been partially refreshed.
 		PartiallyRefreshed { currency_id: CurrencyIdOf<T> },
 		/// Notify reward failed.
-		NotifyRewardFailed { rewards: Vec<(CurrencyIdOf<T>, BalanceOf<T>)> },
+		NotifyRewardFailed { rewards: Vec<CurrencyIdOf<T>> },
 		/// Markup has been deposited.
 		MarkupDeposited {
 			/// The user who deposited
@@ -524,7 +524,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			incentive_from: AccountIdOf<T>,
 			rewards_duration: Option<BlockNumberFor<T>>,
-			rewards: Vec<(CurrencyIdOf<T>, BalanceOf<T>)>,
+			rewards: Vec<CurrencyIdOf<T>>,
 		) -> DispatchResult {
 			T::ControlOrigin::ensure_origin(origin)?;
 			Self::set_incentive(

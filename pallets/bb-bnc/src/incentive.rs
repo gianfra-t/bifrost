@@ -37,7 +37,7 @@ pub struct IncentiveConfig<CurrencyId, Balance, BlockNumber, AccountId> {
 	/// the system account.
 	pub incentive_controller: Option<AccountId>,
 	/// When a round is started, the value to be transferred will be obtained from this field.
-	pub last_reward: Vec<(CurrencyId, Balance)>,
+	pub last_reward: Vec<CurrencyId>,
 }
 
 impl<CurrencyId, Balance, BlockNumber, AccountId> Default
@@ -254,7 +254,7 @@ impl<T: Config> Pallet<T> {
 	pub fn notify_reward_amount(
 		pool_id: PoolId,
 		who: &Option<AccountIdOf<T>>,
-		rewards: Vec<(CurrencyIdOf<T>, BalanceOf<T>)>,
+		rewards: Vec<CurrencyIdOf<T>>,
 	) -> DispatchResult {
 		let account = match who {
 			Some(who) => who,

@@ -131,6 +131,23 @@ mod benchmarks {
 		_(RawOrigin::Signed(caller), receiver, VKSM, TargetChain::Astar(receiver));
 	}
 
+	#[benchmark]
+	fn evm_create_order() {
+		let (caller, receiver) = init_whitelist::<T>();
+		#[extrinsic_call]
+		_(
+			RawOrigin::Signed(caller),
+			receiver,
+			592,
+			0,
+			KSM,
+			BalanceOf::<T>::unique_saturated_from(100_000_000_000_000u128),
+			TargetChain::Astar(receiver),
+			BoundedVec::default(),
+			0,
+		);
+	}
+
 	//   `cargo test -p pallet-example-basic --all-features`, you will see one line per case:
 	impl_benchmark_test_suite!(Pallet, crate::mock::new_test_ext(), crate::mock::Test);
 }

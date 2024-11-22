@@ -30,15 +30,17 @@ use bifrost_slp::{DerivativeAccountProvider, QueryResponseManager};
 use core::convert::TryInto;
 use pallet_traits::evm::InspectEvmAccounts;
 // A few exports that help ease life for downstream crates.
+pub use bifrost_parachain_staking::{InflationInfo, Range};
 use bifrost_primitives::{
 	BifrostCrowdloanId, BifrostVsbondAccount, BuyBackAccount, BuybackPalletId, CloudsPalletId,
 	CommissionPalletId, FarmingBoostPalletId, FarmingGaugeRewardIssuerPalletId,
 	FarmingKeeperPalletId, FarmingRewardIssuerPalletId, FeeSharePalletId, FlexibleFeePalletId,
 	IncentivePalletId, IncentivePoolAccount, LendMarketPalletId, LiquidityAccount,
-	MerkleDirtributorPalletId, OraclePalletId, SlpEntrancePalletId, SlpExitPalletId,
-	SystemMakerPalletId, SystemStakingPalletId, TreasuryPalletId,
+	LocalBncLocation, MerkleDirtributorPalletId, OraclePalletId, ParachainStakingPalletId,
+	SlpEntrancePalletId, SlpExitPalletId, SystemMakerPalletId, SystemStakingPalletId,
+	TreasuryPalletId, BNC,
 };
-use cumulus_pallet_parachain_system::{RelayNumberStrictlyIncreases, RelaychainDataProvider};
+use cumulus_pallet_parachain_system::{RelayNumberMonotonicallyIncreases, RelaychainDataProvider};
 pub use frame_support::{
 	construct_runtime, match_types, parameter_types,
 	traits::{
@@ -78,7 +80,7 @@ mod evm;
 mod migration;
 pub mod weights;
 use bb_bnc::traits::BbBNCInterface;
-use bifrost_asset_registry::{AssetIdMaps, FixedRateOfAsset};
+use bifrost_asset_registry::AssetIdMaps;
 pub use bifrost_primitives::{
 	traits::{
 		CheckSubAccount, FarmingInfo, VtokenMintingInterface, VtokenMintingOperator,
@@ -128,15 +130,25 @@ use sp_runtime::{
 	transaction_validity::TransactionValidityError,
 };
 use static_assertions::const_assert;
-use xcm::{v3::MultiLocation, v4::prelude::*};
+use xcm::{
+	v3::MultiLocation, v4::prelude::*, VersionedAssetId, VersionedAssets, VersionedLocation,
+	VersionedXcm,
+};
 pub use xcm_config::{BifrostTreasuryAccount, MultiCurrency};
 use xcm_executor::{traits::QueryHandler, XcmExecutor};
 
 pub mod governance;
 use crate::xcm_config::XcmRouter;
+use bifrost_primitives::OraclePriceProvider;
+use frame_support::weights::WeightToFee as _;
 use governance::{
 	custom_origins, CoreAdminOrCouncil, LiquidStaking, SALPAdmin, Spender, TechAdmin,
 	TechAdminOrCouncil,
+};
+use xcm::IntoVersion;
+use xcm_fee_payment_runtime_api::{
+	dry_run::{CallDryRunEffects, Error as XcmDryRunApiError, XcmDryRunEffects},
+	fees::Error as XcmPaymentApiError,
 };
 
 use bifrost_primitives::MoonbeamChainId;
@@ -176,7 +188,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	spec_name: create_runtime_str!("bifrost_polkadot"),
 	impl_name: create_runtime_str!("bifrost_polkadot"),
 	authoring_version: 0,
-	spec_version: 14000,
+	spec_version: 15000,
 	impl_version: 0,
 	apis: RUNTIME_API_VERSIONS,
 	transaction_version: 1,
@@ -334,6 +346,7 @@ pub enum ProxyType {
 	Governance = 2,
 	CancelProxy = 3,
 	IdentityJudgement = 4,
+	Staking = 5,
 }
 
 impl Default for ProxyType {
@@ -368,8 +381,12 @@ impl InstanceFilter<RuntimeCall> for ProxyType {
 				// Specifically omitting Vesting `vested_transfer`, and `force_vested_transfer`
 				RuntimeCall::Utility(..) |
 				RuntimeCall::Proxy(..) |
-				RuntimeCall::Multisig(..)
+				RuntimeCall::Multisig(..) |
+				RuntimeCall::ParachainStaking(..)
 			),
+			ProxyType::Staking => {
+				matches!(c, RuntimeCall::ParachainStaking(..) | RuntimeCall::Utility(..))
+			},
 			ProxyType::Governance => matches!(
 				c,
 				RuntimeCall::Democracy(..) |
@@ -799,6 +816,13 @@ parameter_types! {
 	pub const RelayOrigin: AggregateMessageOrigin = AggregateMessageOrigin::Parent;
 }
 
+type ConsensusHook = cumulus_pallet_aura_ext::FixedVelocityConsensusHook<
+	Runtime,
+	RELAY_CHAIN_SLOT_DURATION_MILLIS,
+	BLOCK_PROCESSING_VELOCITY,
+	UNINCLUDED_SEGMENT_CAPACITY,
+>;
+
 impl cumulus_pallet_parachain_system::Config for Runtime {
 	type DmpQueue = frame_support::traits::EnqueueWithOrigin<MessageQueue, RelayOrigin>;
 	type RuntimeEvent = RuntimeEvent;
@@ -808,14 +832,83 @@ impl cumulus_pallet_parachain_system::Config for Runtime {
 	type ReservedXcmpWeight = ReservedXcmpWeight;
 	type SelfParaId = parachain_info::Pallet<Runtime>;
 	type XcmpMessageHandler = XcmpQueue;
-	type CheckAssociatedRelayNumber = RelayNumberStrictlyIncreases;
-	type ConsensusHook = cumulus_pallet_parachain_system::ExpectParentIncluded;
+	type CheckAssociatedRelayNumber = RelayNumberMonotonicallyIncreases;
+	type ConsensusHook = ConsensusHook;
 	type WeightInfo = cumulus_pallet_parachain_system::weights::SubstrateWeight<Runtime>;
 }
 
 impl parachain_info::Config for Runtime {}
 
 impl cumulus_pallet_aura_ext::Config for Runtime {}
+
+parameter_types! {
+	/// Minimum round length is 2 minutes (10 * 12 second block times)
+	pub const MinBlocksPerRound: u32 = 10;
+	/// Rounds before the collator leaving the candidates request can be executed
+	pub const LeaveCandidatesDelay: u32 = 84;
+	/// Rounds before the candidate bond increase/decrease can be executed
+	pub const CandidateBondLessDelay: u32 = 84;
+	/// Rounds before the delegator exit can be executed
+	pub const LeaveDelegatorsDelay: u32 = 84;
+	/// Rounds before the delegator revocation can be executed
+	pub const RevokeDelegationDelay: u32 = 84;
+	/// Rounds before the delegator bond increase/decrease can be executed
+	pub const DelegationBondLessDelay: u32 = 84;
+	/// Rounds before the reward is paid
+	pub const RewardPaymentDelay: u32 = 2;
+	/// Minimum collators selected per round, default at genesis and minimum forever after
+	pub const MinSelectedCandidates: u32 = prod_or_fast!(16,6);
+	/// Maximum top delegations per candidate
+	pub const MaxTopDelegationsPerCandidate: u32 = 300;
+	/// Maximum bottom delegations per candidate
+	pub const MaxBottomDelegationsPerCandidate: u32 = 50;
+	/// Maximum delegations per delegator
+	pub const MaxDelegationsPerDelegator: u32 = 100;
+	/// Minimum stake required to become a collator
+	pub MinCollatorStk: u128 = 5000 * BNCS;
+	/// Minimum stake required to be reserved to be a candidate
+	pub MinCandidateStk: u128 = 5000 * BNCS;
+	/// Minimum stake required to be reserved to be a delegator
+	pub MinDelegatorStk: u128 = 50 * BNCS;
+	pub AllowInflation: bool = false;
+	pub ToMigrateInvulnables: Vec<AccountId> = prod_or_fast!(vec![
+		hex!["5c7e9ccd1045cac7f8c5c77a79c87f44019d1dda4f5032713bda89c5d73cb36b"].into(),
+		hex!["606b0aad375ae1715fbe6a07315136a8e9c1c84a91230f6a0c296c2953581335"].into(),
+		hex!["b6ba81e73bd39203e006fc99cc1e41976745de2ea2007bf62ed7c9a48ccc5b1d"].into(),
+		hex!["ce42cea2dd0d4ac87ccdd5f0f2e1010955467f5a37587cf6af8ee2b4ba781034"].into(),
+	],vec![]);
+	pub PaymentInRound: u128 = 180 * BNCS;
+	pub InitSeedStk: u128 = 5000 * BNCS;
+}
+impl bifrost_parachain_staking::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type Currency = Balances;
+	type MonetaryGovernanceOrigin =
+		EitherOfDiverse<MoreThanHalfCouncil, EnsureRootOrAllTechnicalCommittee>;
+	type MinBlocksPerRound = MinBlocksPerRound;
+	type LeaveCandidatesDelay = LeaveCandidatesDelay;
+	type CandidateBondLessDelay = CandidateBondLessDelay;
+	type LeaveDelegatorsDelay = LeaveDelegatorsDelay;
+	type RevokeDelegationDelay = RevokeDelegationDelay;
+	type DelegationBondLessDelay = DelegationBondLessDelay;
+	type RewardPaymentDelay = RewardPaymentDelay;
+	type MinSelectedCandidates = MinSelectedCandidates;
+	type MaxTopDelegationsPerCandidate = MaxTopDelegationsPerCandidate;
+	type MaxBottomDelegationsPerCandidate = MaxBottomDelegationsPerCandidate;
+	type MaxDelegationsPerDelegator = MaxDelegationsPerDelegator;
+	type MinCollatorStk = MinCollatorStk;
+	type MinCandidateStk = MinCandidateStk;
+	type MinDelegation = MinDelegatorStk;
+	type MinDelegatorStk = MinDelegatorStk;
+	type AllowInflation = AllowInflation;
+	type PaymentInRound = PaymentInRound;
+	type ToMigrateInvulnables = ToMigrateInvulnables;
+	type PalletId = ParachainStakingPalletId;
+	type InitSeedStk = InitSeedStk;
+	type OnCollatorPayout = ();
+	type OnNewRound = ();
+	type WeightInfo = bifrost_parachain_staking::weights::SubstrateWeight<Runtime>;
+}
 
 parameter_types! {
 	pub const Period: u32 = 6 * HOURS;
@@ -825,20 +918,20 @@ parameter_types! {
 impl pallet_session::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type Keys = opaque::SessionKeys;
-	type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
+	type NextSessionRotation = ParachainStaking;
 	// Essentially just Aura, but lets be pedantic.
 	type SessionHandler =
 		<opaque::SessionKeys as sp_runtime::traits::OpaqueKeys>::KeyTypeIdProviders;
-	type SessionManager = CollatorSelection;
-	type ShouldEndSession = pallet_session::PeriodicSessions<Period, Offset>;
+	type SessionManager = ParachainStaking;
+	type ShouldEndSession = ParachainStaking;
 	type ValidatorId = <Self as frame_system::Config>::AccountId;
 	// we don't have stash and controller, thus we don't need the convert as well.
-	type ValidatorIdOf = pallet_collator_selection::IdentityCollator;
+	type ValidatorIdOf = ConvertInto;
 	type WeightInfo = pallet_session::weights::SubstrateWeight<Runtime>;
 }
 
 impl pallet_authorship::Config for Runtime {
-	type EventHandler = CollatorSelection;
+	type EventHandler = ParachainStaking;
 	type FindAuthor = pallet_session::FindAccountFromAuthorIndex<Self, Aura>;
 }
 
@@ -848,28 +941,6 @@ impl pallet_aura::Config for Runtime {
 	type MaxAuthorities = ConstU32<100_000>;
 	type AllowMultipleBlocksPerSlot = ConstBool<false>;
 	type SlotDuration = ConstU64<SLOT_DURATION>;
-}
-
-parameter_types! {
-	pub const PotId: PalletId = PalletId(*b"PotStake");
-	pub const SessionLength: BlockNumber = 6 * HOURS;
-	pub const MaxInvulnerables: u32 = 100;
-}
-
-impl pallet_collator_selection::Config for Runtime {
-	type Currency = Balances;
-	type RuntimeEvent = RuntimeEvent;
-	// should be a multiple of session or things will get inconsistent
-	type KickThreshold = Period;
-	type MaxCandidates = MaxCandidates;
-	type MaxInvulnerables = MaxInvulnerables;
-	type PotId = PotId;
-	type UpdateOrigin = EnsureRoot<AccountId>;
-	type ValidatorId = <Self as frame_system::Config>::AccountId;
-	type ValidatorIdOf = pallet_collator_selection::IdentityCollator;
-	type ValidatorRegistration = Session;
-	type WeightInfo = ();
-	type MinEligibleCollators = ConstU32<5>;
 }
 
 // culumus runtime end
@@ -1100,7 +1171,7 @@ impl bifrost_slp::Config for Runtime {
 	type SubstrateResponseManager = SubstrateResponseManager;
 	type MaxTypeEntryPerBlock = MaxTypeEntryPerBlock;
 	type MaxRefundPerBlock = MaxRefundPerBlock;
-	type ParachainStaking = ();
+	type ParachainStaking = ParachainStaking;
 	type XcmTransfer = XTokens;
 	type MaxLengthLimit = MaxLengthLimit;
 	type XcmWeightAndFeeHandler = XcmInterface;
@@ -1149,6 +1220,7 @@ parameter_types! {
 	pub const BlocksPerRound: u32 = prod_or_fast!(1500, 50);
 	pub const MaxTokenLen: u32 = 500;
 	pub const MaxFarmingPoolIdLen: u32 = 100;
+	pub BenefitReceivingAccount: AccountId = FeeSharePalletId::get().into_account_truncating();
 }
 
 impl bifrost_system_staking::Config for Runtime {
@@ -1158,7 +1230,7 @@ impl bifrost_system_staking::Config for Runtime {
 	type WeightInfo = weights::bifrost_system_staking::BifrostWeight<Runtime>;
 	type FarmingInfo = Farming;
 	type VtokenMintingInterface = VtokenMinting;
-	type TreasuryAccount = BifrostTreasuryAccount;
+	type BenefitReceivingAccount = BenefitReceivingAccount;
 	type PalletId = SystemStakingPalletId;
 	type BlocksPerRound = BlocksPerRound;
 	type MaxTokenLen = MaxTokenLen;
@@ -1241,7 +1313,7 @@ parameter_types! {
 pub struct DerivativeAccountTokenFilter;
 impl Contains<CurrencyId> for DerivativeAccountTokenFilter {
 	fn contains(token: &CurrencyId) -> bool {
-		*token == RelayCurrencyId::get()
+		*token == RelayCurrencyId::get() || *token == BNC
 	}
 }
 
@@ -1486,7 +1558,7 @@ impl leverage_staking::Config for Runtime {
 parameter_types! {
 	pub const ClearingDuration: u32 = prod_or_fast!(1 * DAYS, 10 * MINUTES);
 	pub const NameLengthLimit: u32 = 20;
-	pub BifrostCommissionReceiver: AccountId = TreasuryPalletId::get().into_account_truncating();
+	pub BifrostCommissionReceiver: AccountId = FeeSharePalletId::get().into_account_truncating();
 }
 
 impl bifrost_channel_commission::Config for Runtime {
@@ -1658,10 +1730,10 @@ construct_runtime! {
 
 		// Collator support. the order of these 4 are important and shall not change.
 		Authorship: pallet_authorship = 20,
-		CollatorSelection: pallet_collator_selection = 21,
 		Session: pallet_session = 22,
 		Aura: pallet_aura = 23,
 		AuraExt: cumulus_pallet_aura_ext = 24,
+		ParachainStaking: bifrost_parachain_staking = 25,
 
 		// Governance stuff
 		Democracy: pallet_democracy = 30,
@@ -1818,7 +1890,7 @@ impl cumulus_pallet_xcmp_queue::migration::v5::V5Config for Runtime {
 pub type Migrations = migrations::Unreleased;
 
 parameter_types! {
-	pub const SystemMakerName: &'static str = "SystemMaker";
+	pub const CollatorSelectionName: &'static str = "CollatorSelection";
 }
 
 /// The runtime migrations per release.
@@ -1827,7 +1899,13 @@ pub mod migrations {
 	use super::*;
 
 	/// Unreleased migrations. Add new ones here:
-	pub type Unreleased = pallet_xcm::migration::MigrateToLatestXcmVersion<Runtime>;
+	pub type Unreleased = (
+		// permanent migration, do not remove
+		pallet_xcm::migration::MigrateToLatestXcmVersion<Runtime>,
+		bifrost_parachain_staking::migrations::InitGenesisMigration<Runtime>,
+		frame_support::migrations::RemovePallet<CollatorSelectionName, RocksDbWeight>,
+		bifrost_flexible_fee::migrations::v3::PolkadotMigrateToV3<Runtime>,
+	);
 }
 
 /// Executive: handles dispatch to the various modules.
@@ -2292,11 +2370,63 @@ impl fp_rpc::EthereumRuntimeRPCApi<Block> for Runtime {
 
 	impl sp_consensus_aura::AuraApi<Block, AuraId> for Runtime {
 		fn slot_duration() -> sp_consensus_aura::SlotDuration {
-			sp_consensus_aura::SlotDuration::from_millis(Aura::slot_duration())
+			sp_consensus_aura::SlotDuration::from_millis(SLOT_DURATION)
 		}
 
 		fn authorities() -> Vec<AuraId> {
 			pallet_aura::Authorities::<Runtime>::get().into_inner()
+		}
+	}
+
+	impl cumulus_primitives_aura::AuraUnincludedSegmentApi<Block> for Runtime {
+		fn can_build_upon(
+			included_hash: <Block as BlockT>::Hash,
+			slot: cumulus_primitives_aura::Slot,
+		) -> bool {
+			ConsensusHook::can_build_upon(included_hash, slot)
+		}
+	}
+
+	impl xcm_fee_payment_runtime_api::fees::XcmPaymentApi<Block> for Runtime {
+		fn query_acceptable_payment_assets(xcm_version: xcm::Version) -> Result<Vec<VersionedAssetId>, XcmPaymentApiError> {
+			let acceptable_assets = AssetRegistry::asset_ids();
+			PolkadotXcm::query_acceptable_payment_assets(xcm_version, acceptable_assets)
+		}
+
+		fn query_weight_to_asset_fee(weight: Weight, asset: VersionedAssetId) -> Result<u128, XcmPaymentApiError> {
+			let asset = asset
+				.into_version(4)
+				.map_err(|_| XcmPaymentApiError::VersionedConversionFailed)?;
+			let bnc_asset = VersionedAssetId::V4(LocalBncLocation::get().into());
+
+			if asset == bnc_asset {
+				// for native token
+				Ok(WeightToFee::weight_to_fee(&weight))
+			} else {
+				let native_fee = WeightToFee::weight_to_fee(&weight);
+				let asset_location = &asset.try_as::<AssetId>().map_err(|_| XcmPaymentApiError::VersionedConversionFailed)?.0;
+				let asset_currency = AssetIdMaps::<Runtime>::get_currency_id(&asset_location).ok_or(XcmPaymentApiError::AssetNotFound)?;
+				let asset_fee = Prices::get_oracle_amount_by_currency_and_amount_in(&bifrost_primitives::BNC, native_fee, &asset_currency).ok_or(XcmPaymentApiError::AssetNotFound)?.0;
+				Ok(asset_fee)
+			}
+		}
+
+		fn query_xcm_weight(message: VersionedXcm<()>) -> Result<Weight, XcmPaymentApiError> {
+			PolkadotXcm::query_xcm_weight(message)
+		}
+
+		fn query_delivery_fees(destination: VersionedLocation, message: VersionedXcm<()>) -> Result<VersionedAssets, XcmPaymentApiError> {
+			PolkadotXcm::query_delivery_fees(destination, message)
+		}
+	}
+
+	impl xcm_fee_payment_runtime_api::dry_run::DryRunApi<Block, RuntimeCall, RuntimeEvent, OriginCaller> for Runtime {
+		fn dry_run_call(origin: OriginCaller, call: RuntimeCall) -> Result<CallDryRunEffects<RuntimeEvent>, XcmDryRunApiError> {
+			PolkadotXcm::dry_run_call::<Runtime, XcmRouter, OriginCaller, RuntimeCall>(origin, call)
+		}
+
+		fn dry_run_xcm(origin_location: VersionedLocation, xcm: VersionedXcm<RuntimeCall>) -> Result<XcmDryRunEffects<RuntimeEvent>, XcmDryRunApiError> {
+			PolkadotXcm::dry_run_xcm::<Runtime, XcmRouter, RuntimeCall, xcm_config::XcmConfig>(origin_location, xcm)
 		}
 	}
 
@@ -2529,31 +2659,7 @@ impl fp_rpc::EthereumRuntimeRPCApi<Block> for Runtime {
 	}
 }
 
-struct CheckInherents;
-#[allow(deprecated)]
-impl cumulus_pallet_parachain_system::CheckInherents<Block> for CheckInherents {
-	fn check_inherents(
-		block: &Block,
-		relay_state_proof: &cumulus_pallet_parachain_system::RelayChainStateProof,
-	) -> sp_inherents::CheckInherentsResult {
-		let relay_chain_slot = relay_state_proof
-			.read_slot()
-			.expect("Could not read the relay chain slot from the proof");
-
-		let inherent_data =
-			cumulus_primitives_timestamp::InherentDataProvider::from_relay_chain_slot_and_duration(
-				relay_chain_slot,
-				sp_std::time::Duration::from_secs(6),
-			)
-			.create_inherent_data()
-			.expect("Could not create the timestamp inherent data");
-
-		inherent_data.check_extrinsics(&block)
-	}
-}
-
 cumulus_pallet_parachain_system::register_validate_block! {
 	Runtime = Runtime,
 	BlockExecutor = cumulus_pallet_aura_ext::BlockExecutor::<Runtime, Executive>,
-	CheckInherents = CheckInherents,
 }

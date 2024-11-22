@@ -77,10 +77,10 @@ cumulus-pallet-aura-ext = { workspace = true }
 cumulus-pallet-parachain-system = { workspace = true }
 cumulus-pallet-xcm = { workspace = true }
 cumulus-pallet-xcmp-queue = { workspace = true }
+cumulus-primitives-aura = { workspace = true }
 cumulus-primitives-core = { workspace = true }
 cumulus-primitives-timestamp = { workspace = true }
 cumulus-primitives-utility = { workspace = true }
-pallet-collator-selection = { workspace = true }
 parachain-info = { workspace = true }
 parachains-common = { workspace = true }
 
@@ -92,6 +92,7 @@ polkadot-runtime-common = { workspace = true }
 xcm = { workspace = true }
 xcm-builder = { workspace = true }
 xcm-executor = { workspace = true }
+xcm-fee-payment-runtime-api = { workspace = true }
 
 # orml
 orml-tokens = { workspace = true }
@@ -163,6 +164,7 @@ bifrost-vstoken-conversion = { workspace = true }
 bifrost-vtoken-minting = { workspace = true }
 bifrost-vtoken-voting = { workspace = true, features = [ "polkadot" ] }
 bifrost-xcm-interface = { workspace = true }
+bifrost-parachain-staking = { workspace = true }
 lend-market = { workspace = true }
 lend-market-rpc-runtime-api = { workspace = true }
 pallet-prices = { workspace = true }
@@ -191,7 +193,6 @@ std = [
 	"pallet-aura/std",
 	"pallet-balances/std",
 	"pallet-bounties/std",
-	"pallet-collator-selection/std",
 	"pallet-collective/std",
 	"pallet-conviction-voting/std",
 	"pallet-democracy/std",
@@ -232,6 +233,7 @@ std = [
 	"cumulus-pallet-parachain-system/std",
 	"cumulus-pallet-xcm/std",
 	"cumulus-pallet-xcmp-queue/std",
+	"cumulus-primitives-aura/std",
 	"cumulus-primitives-core/std",
 	"cumulus-primitives-timestamp/std",
 	"cumulus-primitives-utility/std",
@@ -241,6 +243,7 @@ std = [
 	"xcm-builder/std",
 	"xcm-executor/std",
 	"xcm/std",
+	"xcm-fee-payment-runtime-api/std",
 
 	"orml-tokens/std",
 	"orml-traits/std",
@@ -305,7 +308,9 @@ std = [
 	"pallet-evm-accounts/std",
 	"pallet-evm-accounts-rpc-runtime-api/std",
 	"bifrost-clouds-convert/std",
+
 	"bifrost-vtoken-minting-rpc-runtime-api/std",
+	"bifrost-parachain-staking/std",
 
 	"substrate-wasm-builder"
 ]
@@ -349,6 +354,7 @@ runtime-benchmarks = [
 	"bifrost-channel-commission/runtime-benchmarks",
 	"bifrost-clouds-convert/runtime-benchmarks",
 	"bifrost-buy-back/runtime-benchmarks",
+	"bifrost-parachain-staking/runtime-benchmarks",
 ]
 
 try-runtime = [
@@ -396,7 +402,6 @@ try-runtime = [
 	"pallet-authorship/try-runtime",
 	"pallet-balances/try-runtime",
 	"pallet-bounties/try-runtime",
-	"pallet-collator-selection/try-runtime",
 	"pallet-collective/try-runtime",
 	"pallet-conviction-voting/try-runtime",
 	"pallet-democracy/try-runtime",
@@ -427,6 +432,7 @@ try-runtime = [
 	"pallet-evm/try-runtime",
 	"pallet-evm-chain-id/try-runtime",
 	"pallet-dynamic-fee/try-runtime",
+	"bifrost-parachain-staking/try-runtime",
 ]
 
 # Enable the metadata hash generation in the wasm builder.

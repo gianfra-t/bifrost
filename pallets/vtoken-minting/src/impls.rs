@@ -376,6 +376,10 @@ impl<T: Config> Pallet<T> {
 			redeem_type,
 		)?;
 
+		if redeem_currency_amount == Default::default() {
+			return Ok(());
+		}
+
 		Self::update_unlock_ledger(
 			&redeemer,
 			&redeem_currency_id,
@@ -523,17 +527,20 @@ impl<T: Config> Pallet<T> {
 			};
 			Ok((redeem_currency_amount, redeem_to))
 		} else {
-			redeem_currency_amount = entrance_account_balance;
-			let ed = T::MultiCurrency::minimum_balance(redeem_currency_id);
-			if redeem_currency_amount >= ed {
-				T::MultiCurrency::transfer(
-					redeem_currency_id,
-					&entrance_account,
-					&redeemer,
-					redeem_currency_amount,
-				)?;
+			if let RedeemType::Native = redeem_type {
+				redeem_currency_amount = entrance_account_balance;
+				let ed = T::MultiCurrency::minimum_balance(redeem_currency_id);
+				if redeem_currency_amount >= ed {
+					T::MultiCurrency::transfer(
+						redeem_currency_id,
+						&entrance_account,
+						&redeemer,
+						redeem_currency_amount,
+					)?;
+				}
+				return Ok((redeem_currency_amount, RedeemTo::Native(redeemer)));
 			}
-			Ok((redeem_currency_amount, RedeemTo::Native(redeemer)))
+			Ok((Default::default(), RedeemTo::Native(redeemer)))
 		}
 	}
 
