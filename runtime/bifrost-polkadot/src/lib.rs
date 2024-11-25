@@ -38,7 +38,7 @@ use bifrost_primitives::{
 	IncentivePalletId, IncentivePoolAccount, LendMarketPalletId, LiquidityAccount,
 	LocalBncLocation, MerkleDirtributorPalletId, OraclePalletId, ParachainStakingPalletId,
 	SlpEntrancePalletId, SlpExitPalletId, SystemMakerPalletId, SystemStakingPalletId,
-	TreasuryPalletId,
+	TreasuryPalletId, BNC,
 };
 use cumulus_pallet_parachain_system::{RelayNumberMonotonicallyIncreases, RelaychainDataProvider};
 pub use frame_support::{
@@ -188,7 +188,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	spec_name: create_runtime_str!("bifrost_polkadot"),
 	impl_name: create_runtime_str!("bifrost_polkadot"),
 	authoring_version: 0,
-	spec_version: 15000,
+	spec_version: 16000,
 	impl_version: 0,
 	apis: RUNTIME_API_VERSIONS,
 	transaction_version: 1,
@@ -1313,7 +1313,7 @@ parameter_types! {
 pub struct DerivativeAccountTokenFilter;
 impl Contains<CurrencyId> for DerivativeAccountTokenFilter {
 	fn contains(token: &CurrencyId) -> bool {
-		*token == RelayCurrencyId::get()
+		*token == RelayCurrencyId::get() || *token == BNC
 	}
 }
 
@@ -1902,9 +1902,6 @@ pub mod migrations {
 	pub type Unreleased = (
 		// permanent migration, do not remove
 		pallet_xcm::migration::MigrateToLatestXcmVersion<Runtime>,
-		bifrost_parachain_staking::migrations::InitGenesisMigration<Runtime>,
-		frame_support::migrations::RemovePallet<CollatorSelectionName, RocksDbWeight>,
-		bifrost_flexible_fee::migrations::v3::PolkadotMigrateToV3<Runtime>,
 	);
 }
 

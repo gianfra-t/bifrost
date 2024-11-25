@@ -2286,6 +2286,8 @@ impl<T: Config, F: Contains<CurrencyIdOf<T>>>
 		Self::get_multilocation(token, derivative_index).and_then(|location| {
 			DelegatorLedgers::<T>::get(token, location).and_then(|ledger| match ledger {
 				Ledger::Substrate(l) if F::contains(&token) => Some((l.total, l.active)),
+				Ledger::ParachainStaking(l) if F::contains(&token) =>
+					Some((l.total, l.total.checked_sub(&l.less_total).unwrap_or_default())),
 				_ => None,
 			})
 		})
