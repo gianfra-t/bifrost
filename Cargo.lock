@@ -844,7 +844,7 @@ dependencies = [
 
 [[package]]
 name = "bifrost-cli"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "bifrost-primitives",
  "bifrost-service",
@@ -1175,6 +1175,7 @@ dependencies = [
  "cumulus-pallet-parachain-system",
  "cumulus-pallet-xcm",
  "cumulus-pallet-xcmp-queue",
+ "cumulus-primitives-aura",
  "cumulus-primitives-core",
  "cumulus-primitives-timestamp",
  "cumulus-primitives-utility",
@@ -1262,6 +1263,7 @@ dependencies = [
  "strum 0.26.3",
  "strum_macros 0.26.4",
  "substrate-wasm-builder",
+ "xcm-runtime-apis",
  "zenlink-protocol",
  "zenlink-protocol-runtime-api",
  "zenlink-stable-amm",
@@ -1310,6 +1312,7 @@ dependencies = [
  "bifrost-fee-share",
  "bifrost-flexible-fee",
  "bifrost-flexible-fee-rpc-runtime-api",
+ "bifrost-parachain-staking",
  "bifrost-primitives",
  "bifrost-runtime-common",
  "bifrost-salp",
@@ -1332,6 +1335,7 @@ dependencies = [
  "cumulus-pallet-parachain-system",
  "cumulus-pallet-xcm",
  "cumulus-pallet-xcmp-queue",
+ "cumulus-primitives-aura",
  "cumulus-primitives-core",
  "cumulus-primitives-timestamp",
  "cumulus-primitives-utility",
@@ -1370,7 +1374,6 @@ dependencies = [
  "pallet-balances",
  "pallet-base-fee",
  "pallet-bounties",
- "pallet-collator-selection",
  "pallet-collective",
  "pallet-conviction-voting",
  "pallet-democracy",
@@ -1443,6 +1446,7 @@ dependencies = [
  "strum 0.26.3",
  "strum_macros 0.26.4",
  "substrate-wasm-builder",
+ "xcm-runtime-apis",
  "zenlink-protocol",
  "zenlink-protocol-runtime-api",
 ]
@@ -1550,7 +1554,6 @@ dependencies = [
  "orml-tokens",
  "orml-traits",
  "orml-xcm-support",
- "pallet-collator-selection",
  "pallet-collective",
  "pallet-democracy",
  "pallet-membership",
