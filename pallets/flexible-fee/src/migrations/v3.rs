@@ -116,3 +116,33 @@ impl<T: Config> OnRuntimeUpgrade for MigrateToV3<T> {
 		Ok(())
 	}
 }
+
+pub struct PolkadotMigrateToV3<T>(sp_std::marker::PhantomData<T>);
+impl<T: Config> OnRuntimeUpgrade for PolkadotMigrateToV3<T> {
+	fn on_runtime_upgrade() -> frame_support::weights::Weight {
+		// Check the storage version
+		let onchain_version = Pallet::<T>::on_chain_storage_version();
+		if onchain_version < 3 {
+			log::info!(target: LOG_TARGET, "In the Polkadot environment, no migration will be performed; only the version number will be updated..");
+
+			// Update the storage version
+			StorageVersion::new(3).put::<Pallet<T>>();
+
+			// Return the consumed weight
+			Weight::from(T::DbWeight::get().reads_writes(1, 1))
+		} else {
+			// We don't do anything here.
+			Weight::zero()
+		}
+	}
+
+	#[cfg(feature = "try-runtime")]
+	fn pre_upgrade() -> Result<Vec<u8>, TryRuntimeError> {
+		Ok(sp_std::vec![])
+	}
+
+	#[cfg(feature = "try-runtime")]
+	fn post_upgrade(_cnt: Vec<u8>) -> Result<(), TryRuntimeError> {
+		Ok(())
+	}
+}

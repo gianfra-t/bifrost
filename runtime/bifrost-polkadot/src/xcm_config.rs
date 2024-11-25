@@ -24,8 +24,9 @@ use bifrost_primitives::{
 	CurrencyId, CurrencyIdMapping, EthereumLocation, NativeAssetFrom, PolkadotNetwork,
 	PolkadotUniversalLocation, SelfLocation, TokenSymbol, DOT_TOKEN_ID,
 };
-use bifrost_runtime_common::currency_adapter::{
-	BifrostDropAssets, DepositToAlternative, MultiCurrencyAdapter,
+use bifrost_runtime_common::{
+	currency_adapter::{BifrostDropAssets, DepositToAlternative, MultiCurrencyAdapter},
+	xcm_weight_trader::XcmWeightTrader,
 };
 use cumulus_primitives_core::AggregateMessageOrigin;
 pub use cumulus_primitives_core::ParaId;
@@ -37,11 +38,8 @@ pub use orml_traits::{location::AbsoluteReserveProvider, parameter_type_with_key
 use orml_xcm_support::{IsNativeConcrete, MultiNativeAsset};
 use pallet_xcm::XcmPassthrough;
 use parachains_common::message_queue::{NarrowOriginToSibling, ParaIdToSibling};
-use parity_scale_codec::Encode;
 pub use polkadot_parachain_primitives::primitives::Sibling;
 use polkadot_runtime_common::xcm_sender::NoPriceForMessageDelivery;
-use sp_core::bounded::BoundedVec;
-use sp_std::convert::TryFrom;
 use xcm::v4::{Asset, AssetId, Location};
 pub use xcm_builder::{
 	AccountId32Aliases, AllowKnownQueryResponses, AllowSubscriptionsFrom,
@@ -66,7 +64,7 @@ parameter_types! {
 	// XTokens pallet supports maximum number of assets to be transferred at a time
 	pub const MaxAssetsForTransfer: usize = 2;
 	// One XCM operation is 200_000_000 weight, cross-chain transfer ~= 2x of transfer = 3_000_000_000
-	pub const UnitWeightCost: Weight = Weight::from_parts(200_000_000, 0);
+	pub const UnitWeightCost: Weight = Weight::from_parts(50_000_000, 0);
 	// Maximum number of instructions that can be executed in one XCM message
 	pub const MaxInstructions: u32 = 100;
 }
@@ -139,47 +137,6 @@ pub type BifrostAssetTransactor = MultiCurrencyAdapter<
 	DepositToAlternative<BifrostTreasuryAccount, Currencies, CurrencyId, AccountId, Balance>,
 >;
 
-parameter_types! {
-	pub DotPerSecond: (AssetId,u128, u128) = (Location::parent().into(), dot_per_second::<Runtime>(),0);
-	pub BncPerSecond: (AssetId,u128, u128) = (
-		Location::new(
-			1,
-			[xcm::v4::Junction::Parachain(SelfParaId::get()), xcm::v4::Junction::from(BoundedVec::try_from(NativeCurrencyId::get().encode()).unwrap())],
-		).into(),
-		// BNC:DOT = 80:1
-		dot_per_second::<Runtime>() * 80,
-		0
-	);
-	pub BncNewPerSecond: (AssetId,u128, u128) = (
-		Location::new(
-			0,
-			[xcm::v4::Junction::from(BoundedVec::try_from(NativeCurrencyId::get().encode()).unwrap())]
-		).into(),
-		// BNC:DOT = 80:1
-		dot_per_second::<Runtime>() * 80,
-	0
-	);
-	pub ZlkPerSecond: (AssetId, u128,u128) = (
-		Location::new(
-			1,
-			[xcm::v4::Junction::Parachain(SelfParaId::get()), xcm::v4::Junction::from(BoundedVec::try_from(CurrencyId::Token(TokenSymbol::ZLK).encode()).unwrap())]
-		).into(),
-		// ZLK:KSM = 150:1
-		dot_per_second::<Runtime>() * 150 * 1_000_000,
-	0
-	);
-	pub ZlkNewPerSecond: (AssetId, u128,u128) = (
-		Location::new(
-			0,
-			[xcm::v4::Junction::from(BoundedVec::try_from(CurrencyId::Token(TokenSymbol::ZLK).encode()).unwrap())]
-		).into(),
-		// ZLK:KSM = 150:1
-		dot_per_second::<Runtime>() * 150 * 1_000_000,
-	0
-	);
-	pub BasePerSecond: u128 = dot_per_second::<Runtime>();
-}
-
 pub struct ToTreasury;
 impl TakeRevenue for ToTreasury {
 	fn take_revenue(revenue: Asset) {
@@ -192,13 +149,6 @@ impl TakeRevenue for ToTreasury {
 		}
 	}
 }
-
-pub type Trader = (
-	FixedRateOfFungible<BncPerSecond, ToTreasury>,
-	FixedRateOfFungible<BncNewPerSecond, ToTreasury>,
-	FixedRateOfFungible<DotPerSecond, ToTreasury>,
-	FixedRateOfAsset<Runtime, BasePerSecond, ToTreasury>,
-);
 
 /// A call filter for the XCM Transact instruction. This is a temporary measure until we properly
 /// account for proof size weights.
@@ -305,7 +255,9 @@ impl xcm_executor::Config for XcmConfig {
 	type OriginConverter = XcmOriginToTransactDispatchOrigin;
 	type ResponseHandler = PolkadotXcm;
 	type SubscriptionService = PolkadotXcm;
-	type Trader = Trader;
+	type Trader = XcmWeightTrader<WeightToFee, Prices, AssetIdMaps<Runtime>, ToTreasury>;
+	// TODO: Implement XcmWeigher, using real Weight, currently per instruction Weight =
+	// Weight::from_parts(50_000_000, 0)
 	type Weigher = FixedWeightBounds<UnitWeightCost, RuntimeCall, MaxInstructions>;
 	type XcmSender = XcmRouter;
 	type PalletInstancesInfo = AllPalletsWithSystem;

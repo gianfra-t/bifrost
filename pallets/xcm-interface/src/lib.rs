@@ -73,11 +73,7 @@ pub mod pallet {
 		type AccountIdToLocation: Convert<Self::AccountId, Location>;
 
 		/// Convert Location to `T::CurrencyId`.
-		type CurrencyIdConvert: CurrencyIdMapping<
-			CurrencyId,
-			xcm::v3::MultiLocation,
-			AssetMetadata<BalanceOf<Self>>,
-		>;
+		type CurrencyIdConvert: CurrencyIdMapping<CurrencyId, AssetMetadata<BalanceOf<Self>>>;
 
 		#[pallet::constant]
 		type ParachainId: Get<ParaId>;
@@ -170,8 +166,8 @@ pub mod pallet {
 			to: H160,
 		) -> DispatchResult {
 			let who = ensure_signed(origin.clone())?;
-			let asset_location =
-				T::CurrencyIdConvert::get_location(currency_id).ok_or(Error::<T>::FailToConvert)?;
+			let asset_location = T::CurrencyIdConvert::get_location(&currency_id)
+				.ok_or(Error::<T>::FailToConvert)?;
 
 			let asset: Asset = Asset {
 				id: AssetId(asset_location),

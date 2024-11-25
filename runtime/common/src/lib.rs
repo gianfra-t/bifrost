@@ -32,6 +32,7 @@ use sp_runtime::{traits::Bounded, FixedPointNumber, Perquintill};
 pub mod constants;
 pub mod currency_adapter;
 pub mod currency_converter;
+pub mod xcm_weight_trader;
 
 #[cfg(test)]
 mod tests;

@@ -338,7 +338,7 @@ impl BbBNCInterface<AccountId, CurrencyId, Balance, BlockNumber> for BbBNC {
 	fn auto_notify_reward(
 		_: u32,
 		_: u64,
-		_: Vec<(CurrencyId, Balance)>,
+		_: Vec<CurrencyId>,
 	) -> Result<(), sp_runtime::DispatchError> {
 		todo!()
 	}
@@ -368,7 +368,7 @@ impl BbBNCInterface<AccountId, CurrencyId, Balance, BlockNumber> for BbBNC {
 	fn add_reward(
 		_addr: &AccountId,
 		_conf: &mut IncentiveConfig<CurrencyId, Balance, BlockNumber, AccountId>,
-		_rewards: &Vec<(CurrencyId, Balance)>,
+		_rewards: &Vec<CurrencyId>,
 		_remaining: Balance,
 	) -> DispatchResult {
 		Ok(())
@@ -376,7 +376,7 @@ impl BbBNCInterface<AccountId, CurrencyId, Balance, BlockNumber> for BbBNC {
 	fn notify_reward(
 		_pool_id: u32,
 		_addr: &Option<AccountId>,
-		_rewards: Vec<(CurrencyId, Balance)>,
+		_rewards: Vec<CurrencyId>,
 	) -> DispatchResult {
 		Ok(())
 	}

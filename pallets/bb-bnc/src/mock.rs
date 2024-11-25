@@ -412,7 +412,7 @@ impl ExtBuilder {
 		self.balances(vec![
 			(ALICE, BNC, 1_000_000_000_000),
 			(ALICE, VBNC, 1_000_000_000_000_000),
-			(ALICE, KSM, 1_000_000_000_000),
+			(ALICE, KSM, 1_000_000_000),
 			(BOB, BNC, 1_000_000_000_000),
 			(BOB, VBNC, 1_000_000_000_000_000),
 			(BOB, VKSM, 1_000_000_000_000),
@@ -449,4 +449,9 @@ impl ExtBuilder {
 
 		t.into()
 	}
+}
+
+#[cfg(feature = "runtime-benchmarks")]
+pub fn new_test_ext_benchmark() -> sp_io::TestExternalities {
+	ExtBuilder::default().build()
 }

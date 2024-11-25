@@ -17,17 +17,15 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 use super::*;
-use bifrost_asset_registry::{AssetIdMaps, FixedRateOfAsset};
+use bifrost_asset_registry::AssetIdMaps;
 use bifrost_primitives::{
-	AccountId, AccountIdToLocation, AssetHubChainId, AssetHubLocation, AssetPrefixFrom, CurrencyId,
-	CurrencyIdMapping, EthereumLocation, KaruraChainId, KusamaNetwork, KusamaUniversalLocation,
-	NativeAssetFrom, PhalaChainId, SelfLocation, TokenSymbol,
+	AccountId, AccountIdToLocation, AssetHubLocation, AssetPrefixFrom, CurrencyId,
+	CurrencyIdMapping, EthereumLocation, KusamaNetwork, KusamaUniversalLocation, NativeAssetFrom,
+	SelfLocation, TokenSymbol,
 };
 pub use cumulus_primitives_core::ParaId;
 use frame_support::{parameter_types, sp_runtime::traits::Convert, traits::Get};
-use parity_scale_codec::Encode;
 pub use polkadot_parachain_primitives::primitives::Sibling;
-use sp_std::convert::TryFrom;
 pub use xcm_builder::{
 	AccountId32Aliases, AllowKnownQueryResponses, AllowSubscriptionsFrom,
 	AllowTopLevelPaidExecutionFrom, DescribeAllTerminal, DescribeFamily, EnsureXcmOrigin,
@@ -42,6 +40,7 @@ use bifrost_currencies::BasicCurrencyAdapter;
 use bifrost_runtime_common::{
 	currency_adapter::{BifrostDropAssets, DepositToAlternative, MultiCurrencyAdapter},
 	currency_converter::CurrencyIdConvert,
+	xcm_weight_trader::XcmWeightTrader,
 };
 use cumulus_primitives_core::AggregateMessageOrigin;
 use frame_support::traits::TransformOrigin;
@@ -51,7 +50,6 @@ use orml_xcm_support::{IsNativeConcrete, MultiNativeAsset};
 use pallet_xcm::XcmPassthrough;
 use parachains_common::message_queue::{NarrowOriginToSibling, ParaIdToSibling};
 use polkadot_runtime_common::xcm_sender::NoPriceForMessageDelivery;
-use sp_core::bounded::BoundedVec;
 use xcm::v4::{prelude::*, Location};
 use xcm_builder::{FrameTransactionalProcessor, TrailingSetTopicAsId, WithComputedOrigin};
 
@@ -66,7 +64,7 @@ parameter_types! {
 	// XTokens pallet supports maximum number of assets to be transferred at a time
 	pub const MaxAssetsForTransfer: usize = 2;
 	// One XCM operation is 200_000_000 weight, cross-chain transfer ~= 2x of transfer = 3_000_000_000
-	pub const UnitWeightCost: Weight = Weight::from_parts(200_000_000, 0);
+	pub const UnitWeightCost: Weight = Weight::from_parts(50_000_000, 0);
 	// Maximum number of instructions that can be executed in one XCM message
 	pub const MaxInstructions: u32 = 100;
 }
@@ -137,128 +135,6 @@ pub type BifrostAssetTransactor = MultiCurrencyAdapter<
 	DepositToAlternative<BifrostTreasuryAccount, Currencies, CurrencyId, AccountId, Balance>,
 >;
 
-parameter_types! {
-	pub KsmPerSecond: (AssetId, u128, u128) = (Location::parent().into(), ksm_per_second::<Runtime>(),0);
-	pub VksmPerSecond: (AssetId, u128,u128) = (
-		Location::new(
-			0,
-			[Junction::from(BoundedVec::try_from(CurrencyId::VToken(TokenSymbol::KSM).encode()).unwrap())],
-		).into(),
-		ksm_per_second::<Runtime>(),
-		0
-	);
-	pub VsksmPerSecond: (AssetId, u128,u128) = (
-		Location::new(
-			1,
-			[Parachain(SelfParaId::get()), Junction::from(BoundedVec::try_from(CurrencyId::VSToken(TokenSymbol::KSM).encode()).unwrap())]
-		).into(),
-		ksm_per_second::<Runtime>(),
-		0
-	);
-	pub VsksmNewPerSecond: (AssetId, u128,u128) = (
-		Location::new(
-			0,
-			[Junction::from(BoundedVec::try_from(CurrencyId::VSToken(TokenSymbol::KSM).encode()).unwrap())]
-		).into(),
-		ksm_per_second::<Runtime>(),
-		0
-	);
-	pub BncPerSecond: (AssetId, u128,u128) = (
-		Location::new(
-			1,
-			[Parachain(SelfParaId::get()), Junction::from(BoundedVec::try_from(NativeCurrencyId::get().encode()).unwrap())]
-		).into(),
-		// BNC:KSM = 80:1
-		ksm_per_second::<Runtime>() * 80,
-		0
-	);
-	pub BncNewPerSecond: (AssetId, u128,u128) = (
-		Location::new(
-			0,
-			[Junction::from(BoundedVec::try_from(NativeCurrencyId::get().encode()).unwrap())]
-		).into(),
-		// BNC:KSM = 80:1
-		ksm_per_second::<Runtime>() * 80,
-		0
-	);
-
-	pub ZlkPerSecond: (AssetId, u128,u128) = (
-		Location::new(
-			1,
-			[Parachain(SelfParaId::get()), Junction::from(BoundedVec::try_from(CurrencyId::Token(TokenSymbol::ZLK).encode()).unwrap())]
-		).into(),
-		// ZLK:KSM = 150:1
-		//ZLK has a decimal of 18, while KSM is 12.
-		ksm_per_second::<Runtime>() * 150 * 1_000_000,
-		0
-	);
-	pub ZlkNewPerSecond: (AssetId, u128,u128) = (
-		Location::new(
-			0,
-			[Junction::from(BoundedVec::try_from(CurrencyId::Token(TokenSymbol::ZLK).encode()).unwrap())]
-		).into(),
-		// ZLK:KSM = 150:1
-		//ZLK has a decimal of 18, while KSM is 12.
-		ksm_per_second::<Runtime>() * 150 * 1_000_000,
-		0
-	);
-	pub KarPerSecond: (AssetId, u128,u128) = (
-		Location::new(
-			1,
-			[Parachain(KaruraChainId::get()), Junction::from(BoundedVec::try_from(vec![0,128u8]).unwrap())]
-		).into(),
-		// KAR:KSM = 100:1
-		ksm_per_second::<Runtime>() * 100,
-		0
-	);
-	pub KusdPerSecond: (AssetId, u128,u128) = (
-		Location::new(
-			1,
-			[Parachain(KaruraChainId::get()), Junction::from(BoundedVec::try_from(vec![0,129u8]).unwrap())]
-		).into(),
-		// kUSD:KSM = 400:1
-		ksm_per_second::<Runtime>() * 400,
-		0
-	);
-	pub PhaPerSecond: (AssetId, u128,u128) = (
-		Location::new(
-			1,
-			[Parachain(PhalaChainId::get())],
-		).into(),
-		// PHA:KSM = 400:1
-		ksm_per_second::<Runtime>() * 400,
-		0
-	);
-	pub RmrkPerSecond: (AssetId, u128,u128) = (
-		Location::new(
-			1,
-			[Parachain(AssetHubChainId::get()), GeneralIndex(50)]
-		).into(),
-		// rmrk:KSM = 10:1
-		ksm_per_second::<Runtime>() * 10 / 100, //rmrk currency decimal as 10
-		0
-	);
-	pub RmrkNewPerSecond: (AssetId, u128,u128) = (
-		Location::new(
-			1,
-			[Parachain(AssetHubChainId::get()), PalletInstance(50), GeneralIndex(8)]
-		).into(),
-		// rmrk:KSM = 10:1
-		ksm_per_second::<Runtime>() * 10 / 100, //rmrk currency decimal as 10
-		0
-	);
-	pub MovrPerSecond: (AssetId, u128,u128) = (
-		Location::new(
-			1,
-			[Parachain(MoonriverChainId::get()), PalletInstance(10)]
-		).into(),
-		// MOVR:KSM = 2.67:1
-		ksm_per_second::<Runtime>() * 267 * 10_000, //movr currency decimal as 18
-		0
-	);
-	pub BasePerSecond: u128 = ksm_per_second::<Runtime>();
-}
-
 pub struct ToTreasury;
 impl TakeRevenue for ToTreasury {
 	fn take_revenue(revenue: Asset) {
@@ -271,24 +147,6 @@ impl TakeRevenue for ToTreasury {
 		}
 	}
 }
-
-pub type Trader = (
-	FixedRateOfFungible<KsmPerSecond, ToTreasury>,
-	FixedRateOfFungible<VksmPerSecond, ToTreasury>,
-	FixedRateOfFungible<VsksmPerSecond, ToTreasury>,
-	FixedRateOfFungible<VsksmNewPerSecond, ToTreasury>,
-	FixedRateOfFungible<BncPerSecond, ToTreasury>,
-	FixedRateOfFungible<BncNewPerSecond, ToTreasury>,
-	FixedRateOfFungible<ZlkPerSecond, ToTreasury>,
-	FixedRateOfFungible<ZlkNewPerSecond, ToTreasury>,
-	FixedRateOfFungible<KarPerSecond, ToTreasury>,
-	FixedRateOfFungible<KusdPerSecond, ToTreasury>,
-	FixedRateOfFungible<PhaPerSecond, ToTreasury>,
-	FixedRateOfFungible<RmrkPerSecond, ToTreasury>,
-	FixedRateOfFungible<RmrkNewPerSecond, ToTreasury>,
-	FixedRateOfFungible<MovrPerSecond, ToTreasury>,
-	FixedRateOfAsset<Runtime, BasePerSecond, ToTreasury>,
-);
 
 /// A call filter for the XCM Transact instruction. This is a temporary measure until we properly
 /// account for proof size weights.
@@ -398,7 +256,9 @@ impl xcm_executor::Config for XcmConfig {
 	type OriginConverter = XcmOriginToTransactDispatchOrigin;
 	type ResponseHandler = PolkadotXcm;
 	type SubscriptionService = PolkadotXcm;
-	type Trader = Trader;
+	type Trader = XcmWeightTrader<WeightToFee, Prices, AssetIdMaps<Runtime>, ToTreasury>;
+	// TODO: Implement XcmWeigher, using real Weight, currently per instruction Weight =
+	// Weight::from_parts(50_000_000, 0)
 	type Weigher = FixedWeightBounds<UnitWeightCost, RuntimeCall, MaxInstructions>;
 	type XcmSender = XcmRouter;
 	type PalletInstancesInfo = AllPalletsWithSystem;
