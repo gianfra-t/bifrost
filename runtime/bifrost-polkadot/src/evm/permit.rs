@@ -78,7 +78,6 @@ where
 		// Blockchain time is in ms while Ethereum use second timestamps.
 		let timestamp: u128 = <R as pallet_evm::Config>::Timestamp::now().unique_saturated_into();
 		let timestamp: U256 = U256::from(timestamp / 1000);
-		log::info!("timestamp ====================={:?}", timestamp);
 
 		ensure!(deadline >= timestamp, bifrost_flexible_fee::Error::<R>::EvmPermitExpired);
 
