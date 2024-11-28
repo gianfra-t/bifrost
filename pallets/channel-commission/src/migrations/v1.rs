@@ -26,58 +26,58 @@ const LOG_TARGET: &str = "channel-commission::migration";
 
 pub struct MigrateToV1<T>(sp_std::marker::PhantomData<T>);
 impl<T: Config> OnRuntimeUpgrade for MigrateToV1<T> {
-    fn on_runtime_upgrade() -> frame_support::weights::Weight {
-        // Check the storage version
-        let onchain_version = Pallet::<T>::on_chain_storage_version();
-        if onchain_version < 1 {
-            // Transform storage values
-            // We transform the storage values from the old into the new format.
-            log::info!(target: LOG_TARGET, "Start to migrate PeriodClearedCommissions storage...");
-            CommissionTokens::<T>::iter_values().for_each(|commission_token| {
-                log::info!(target: LOG_TARGET, "Init PeriodClearedCommissions for {:?}...", commission_token);
-                // Init the PeriodClearedCommissions of commission_token to 0.
-                PeriodClearedCommissions::<T>::insert(commission_token, BalanceOf::<T>::zero());
-            });
+	fn on_runtime_upgrade() -> frame_support::weights::Weight {
+		// Check the storage version
+		let onchain_version = Pallet::<T>::on_chain_storage_version();
+		if onchain_version < 1 {
+			// Transform storage values
+			// We transform the storage values from the old into the new format.
+			log::info!(target: LOG_TARGET, "Start to migrate PeriodClearedCommissions storage...");
+			CommissionTokens::<T>::iter_values().for_each(|commission_token| {
+				log::info!(target: LOG_TARGET, "Init PeriodClearedCommissions for {:?}...", commission_token);
+				// Init the PeriodClearedCommissions of commission_token to 0.
+				PeriodClearedCommissions::<T>::insert(commission_token, BalanceOf::<T>::zero());
+			});
 
-            // Update the storage version
-            StorageVersion::new(1).put::<Pallet<T>>();
+			// Update the storage version
+			StorageVersion::new(1).put::<Pallet<T>>();
 
-            // Return the consumed weight
-            let count = CommissionTokens::<T>::iter().count();
-            Weight::from(
-                T::DbWeight::get().reads_writes(count as u64 + count as u64 + 1, count as u64 + 1),
-            )
-        } else {
-            // We don't do anything here.
-            Weight::zero()
-        }
-    }
+			// Return the consumed weight
+			let count = CommissionTokens::<T>::iter().count();
+			Weight::from(
+				T::DbWeight::get().reads_writes(count as u64 + count as u64 + 1, count as u64 + 1),
+			)
+		} else {
+			// We don't do anything here.
+			Weight::zero()
+		}
+	}
 
-    #[cfg(feature = "try-runtime")]
-    fn pre_upgrade() -> Result<Vec<u8>, TryRuntimeError> {
-        let cnt = PeriodClearedCommissions::<T>::iter().count();
-        // print out the pre-migrate storage count
-        log::info!(target: LOG_TARGET, "PeriodClearedCommissions pre-migrate storage count: {:?}", cnt);
-        Ok((cnt as u64).encode())
-    }
+	#[cfg(feature = "try-runtime")]
+	fn pre_upgrade() -> Result<Vec<u8>, TryRuntimeError> {
+		let cnt = PeriodClearedCommissions::<T>::iter().count();
+		// print out the pre-migrate storage count
+		log::info!(target: LOG_TARGET, "PeriodClearedCommissions pre-migrate storage count: {:?}", cnt);
+		Ok((cnt as u64).encode())
+	}
 
-    #[cfg(feature = "try-runtime")]
-    fn post_upgrade(_cnt: Vec<u8>) -> Result<(), TryRuntimeError> {
-        let new_count = PeriodClearedCommissions::<T>::iter().count();
-        let should_count = CommissionTokens::<T>::iter().count();
+	#[cfg(feature = "try-runtime")]
+	fn post_upgrade(_cnt: Vec<u8>) -> Result<(), TryRuntimeError> {
+		let new_count = PeriodClearedCommissions::<T>::iter().count();
+		let should_count = CommissionTokens::<T>::iter().count();
 
-        // print out the post-migrate storage count
-        log::info!(
+		// print out the post-migrate storage count
+		log::info!(
 			target: LOG_TARGET,
 			"PeriodClearedCommissions post-migrate storage count: {:?}",
 			new_count
 		);
 
-        ensure!(
+		ensure!(
 			new_count as u64 == should_count as u64,
 			"Post-migration storage count does not match pre-migration count"
 		);
 
-        Ok(())
-    }
+		Ok(())
+	}
 }
