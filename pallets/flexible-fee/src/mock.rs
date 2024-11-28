@@ -431,3 +431,16 @@ impl EvmPermit for PermitDispatchHandler {
 
 	fn on_dispatch_permit_error() {}
 }
+
+pub struct ExtBuilder;
+
+impl ExtBuilder {
+	pub fn build(self) -> sp_io::TestExternalities {
+		new_test_ext()
+	}
+}
+
+#[cfg(feature = "runtime-benchmarks")]
+pub fn new_test_ext_benchmark() -> sp_io::TestExternalities {
+	ExtBuilder.build()
+}
