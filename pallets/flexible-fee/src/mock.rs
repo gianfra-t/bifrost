@@ -310,3 +310,16 @@ impl BalanceCmp<AccountId> for Test {
 		Pallet::<Test>::cmp_with_precision(account, currency, amount, amount_precision)
 	}
 }
+
+pub struct ExtBuilder;
+
+impl ExtBuilder {
+	pub fn build(self) -> sp_io::TestExternalities {
+		new_test_ext()
+	}
+}
+
+#[cfg(feature = "runtime-benchmarks")]
+pub fn new_test_ext_benchmark() -> sp_io::TestExternalities {
+	ExtBuilder.build()
+}
